@@ -3,8 +3,10 @@ project(physics_playground)
 
 enable_testing()
 
-
 set(CMAKE_CXX_STANDARD 20)
+
+find_program(GLSLC glslc REQUIRED)
+
 
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()

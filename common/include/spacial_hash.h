@@ -6,7 +6,7 @@
 #include <glm/glm.hpp>
 #include <span>
 #include <fmt/format.h>
-#include "particle.h"
+#include "model2d.h"
 
 class SpacialHashGrid2D {
 public:
@@ -33,14 +33,14 @@ public:
         return glm::abs(h) % static_cast<int32_t>(m_tableSize);
     }
 
-    void initialize(std::span<glm::vec2> positions) {
-        const auto numObjects = glm::min(positions.size(), m_cellEntries.size());
+    void initialize(std::span<Particle2D> p) {
+        const auto numObjects = glm::min(p.size(), m_cellEntries.size());
 
         std::fill_n(m_counts.begin(), m_counts.size(), 0);
         std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
 
         for(auto i = 0; i < numObjects; i++){
-            auto h = hashPosition(positions[i]);
+            auto h = hashPosition(p[i].cPosition);
             m_counts[h]++;
         }
 
@@ -57,7 +57,7 @@ public:
         m_counts[m_tableSize] = m_counts[m_tableSize - 1];
 
         for(auto i = 0; i < numObjects; i++){
-            const auto h = hashPosition(positions[i]);
+            const auto h = hashPosition(p[i].cPosition);
             m_counts[h]--;
             this->m_cellEntries[this->m_counts[h]] = i;
         }

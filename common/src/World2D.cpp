@@ -6,6 +6,7 @@
 #include "profile.h"
 #include "ImGuiPlugin.hpp"
 #include <memory>
+#include <span>
 
 World2D::World2D(const std::string &title, Dimension simDim, uDimension screenDim)
 : VulkanBaseApp(title, create(screenDim))
@@ -383,16 +384,9 @@ void World2D::resolveCollision(Particle2D &pa, Particle2D &pb, float restitution
 }
 
 void World2D::resolveCollisionGrid() {
-    static std::vector<glm::vec2> positions;
-    const auto N = particles.active;
-    positions.resize(N);
+    grid.initialize(std::span{ particles.handle.data(), particles.active });
 
     for(int i = 0; i < particles.active; i++){
-        positions[i] = particles.handle[i].cPosition;
-    }
-    grid.initialize(positions);
-
-    for(int i = 0; i < N; i++){
         auto& thisParticle = particles.handle[i];
         auto ids = grid.query(thisParticle.cPosition, glm::vec2(m_radius * 2));
         for(int j = 0; j < ids.size(); j++ ){

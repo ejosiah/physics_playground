@@ -7,8 +7,9 @@
 #include <cstddef>
 #include <span>
 #include "types.h"
+#include <stdexcept>
 
-enum class Field : int { Position = 0, Velocity};
+enum class Field : int { Position = 0, Velocity, Mass, Restitution, Radius };
 
 using OffsetStride = std::tuple<int, int>;
 
@@ -35,15 +36,23 @@ struct Iterator : public std::iterator<
 
     Iterator& operator+=(long offset)        { ptr += offset * stride; return *this; }
     Iterator& operator-=(long offset)        { ptr -= offset * stride; return *this; }
+
+    template<typename U>
+    bool operator !=(Iterator<U> other){
+        return ptr != other.ptr;
+    }
 };
 
 
 template<typename ValueType, Field field, typename Layout>
 class View{
 public:
+
+    using iterator = Iterator<ValueType>;
+
     View(Layout layout)
     : m_layout{layout}
-    , m_offset(layout.get(field))
+    , m_offset(layout.get<field>())
     {}
 
     ValueType& operator[](int id) {
@@ -54,6 +63,24 @@ public:
     ValueType& operator[](int id) const {
         auto ptr = (m_layout.data + id);
         return *as<ValueType>(as<char>(ptr) + m_offset);
+    }
+
+    iterator begin() {
+        ValueType* ptr = &this->operator[](0);
+        iterator itr;
+        itr.ptr = ptr;
+        itr.stride = 1;
+
+        return itr;
+    }
+
+    iterator end() {
+        ValueType* ptr = (&this->operator[](m_layout.size - 1)) + 1;
+        iterator itr;
+        itr.ptr = ptr;
+        itr.stride = 1;
+
+        return itr;
     }
 
 private:
@@ -80,6 +107,18 @@ struct Particles{
         return View<VecType, Field::Velocity, Layout>{ data };
     }
 
+    auto inverseMass() {
+        return View<float, Field::Mass, Layout>{ data };
+    }
+
+    auto restitution() {
+        return View<float, Field::Restitution, Layout>{ data };
+    }
+    auto radius() {
+        return View<float, Field::Radius, Layout>{ data };
+
+    }
+
 
 };
 
@@ -98,17 +137,22 @@ struct InterleavedMemoryLayout {
     };
 
     using Members = MembersType;
+    static constexpr auto Width = sizeof(Members) ;
 
     Members* data{};
     size_t size{};
 
+    template<Field field>
     [[nodiscard]]
-    int get(Field field) const {
-        constexpr auto width = sizeof(Members);
+    constexpr int get() const {
         switch(field){
             case Field::Position: return offsetof(Members, position);
             case Field::Velocity: return offsetof(Members, velocity);
+            case Field::Mass: return offsetof(Members, inverseMass);
+            case Field::Restitution: return offsetof(Members, restitution);
+            case Field::Radius: return offsetof(Members, radius);
         }
+        throw std::runtime_error{ "invalid field" };
     }
 };
 
@@ -119,6 +163,10 @@ using InterleavedMemoryParticles = Particles<L, InterleavedMemoryLayout>;
 using InterleavedMemoryParticle2D = Particles<2, InterleavedMemoryLayout>;
 
 template<glm::length_t L>
-InterleavedMemoryParticles<L> createInterleavedMemoryParticle(std::span<typename InterleavedMemoryParticles<L>::Layout::Members> span) {
+inline InterleavedMemoryParticles<L> createInterleavedMemoryParticle(std::span<typename InterleavedMemoryParticles<L>::Layout::Members> span) {
+    return { { span.data(), span.size() } };
+}
+
+inline InterleavedMemoryParticle2D createInterleavedMemoryParticle2D(std::span<typename InterleavedMemoryParticle2D::Layout::Members> span) {
     return { { span.data(), span.size() } };
 }
