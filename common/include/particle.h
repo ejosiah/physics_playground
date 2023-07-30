@@ -99,7 +99,6 @@ struct InterleavedMemoryLayout {
     private:
         InterleavedMemoryLayout m_layout{};
         int m_offset{0};
-
     };
 
     struct MembersType {
@@ -153,7 +152,85 @@ struct InterleavedMemoryLayout {
     }
 };
 
+template<typename VecType>
+struct SeparateFieldMemoryLayout {
+    using Vec = VecType;
+
+    struct MemberType{
+        std::span<Vec> position{};
+        std::span<Vec> prePosition{};
+        std::span<Vec> velocity{};
+        std::span<float> inverseMass{};
+        std::span<float> restitution{};
+        std::span<float> radius{};
+    };
+
+    using Members = MemberType;
+    static constexpr auto Width = sizeof(Vec) * 3 + sizeof(float) * 3;
+
+    Members data{};
+
+    template<typename ValueType, Field field>
+    class View{
+    public:
+
+        View(SeparateFieldMemoryLayout layout)
+                : m_layout{layout}
+                , m_ptr(layout.get<ValueType, field>())
+        {}
+
+        ValueType& operator[](int id) {
+            return m_ptr[id];
+        }
+
+        ValueType& operator[](int id) const {
+            return m_ptr[id];
+        }
+
+    private:
+        SeparateFieldMemoryLayout m_layout{};
+        ValueType* m_ptr{0};
+    };
+
+
+
+    template<typename ValueType, Field field>
+    [[nodiscard]]
+    constexpr ValueType* get() const {
+        switch(field){
+            case Field::Position: return as<ValueType>(data.position.data());
+            case Field::Velocity: return as<ValueType>(data.velocity.data());
+            case Field::Mass: return as<ValueType>(data.inverseMass.data());
+            case Field::Restitution: return as<ValueType>(data.restitution.data());
+            case Field::Radius: return as<ValueType>(data.radius.data());
+        }
+        throw std::runtime_error{ "invalid field" };
+    }
+
+    auto position() {
+        return View<VecType, Field::Position>{ *this };
+    }
+
+    auto velocity() {
+        return View<VecType, Field::Velocity>{ *this };
+    }
+
+    auto inverseMass() {
+        return View<float, Field::Mass>{ *this };
+    }
+
+    auto restitution() {
+        return View<float, Field::Restitution>{ *this };
+    }
+
+    auto radius() {
+        return View<float, Field::Radius>{ *this };
+    }
+
+};
+
 using InterleavedMemoryLayout2D = InterleavedMemoryLayout<glm::vec2>;
+using SeparateFieldMemoryLayout2D = SeparateFieldMemoryLayout<glm::vec2>;
 
 template<template<typename> typename Layout>
 using Particle2D = Particles<2, Layout>;
@@ -164,10 +241,23 @@ using InterleavedMemoryParticles = Particles<L, InterleavedMemoryLayout>;
 using InterleavedMemoryParticle2D = Particles<2, InterleavedMemoryLayout>;
 
 template<glm::length_t L>
+using SeparateFieldParticles = Particles<L, SeparateFieldMemoryLayout>;
+
+using SeparateFieldParticle2D = Particles<2, SeparateFieldMemoryLayout>;
+
+template<glm::length_t L>
 inline InterleavedMemoryParticles<L> createInterleavedMemoryParticle(std::span<typename InterleavedMemoryParticles<L>::Layout::Members> span) {
     return { { span.data(), span.size() } };
 }
 
 inline InterleavedMemoryParticle2D createInterleavedMemoryParticle2D(std::span<typename InterleavedMemoryParticle2D::Layout::Members> span) {
     return { { span.data(), span.size() } };
+}
+
+inline SeparateFieldParticle2D createSeparateFieldParticle2D(std::span<glm::vec2> positions
+                                                             , std::span<glm::vec2> velocity
+                                                             , std::span<float> inverseMass
+                                                             , std::span<float> restitution
+                                                             , std::span<float> radius) {
+    return { { positions, positions, velocity, inverseMass, restitution, radius }};
 }
