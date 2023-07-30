@@ -50,7 +50,6 @@ struct Particles{
     using Layout = LayoutType<VecType>;
 
     Layout layout;
-    size_t size;
 
     auto position() {
         return layout.position();
@@ -69,6 +68,10 @@ struct Particles{
     }
     auto radius() {
         return layout.radius();
+    }
+
+    auto size() const {
+        return layout.size();
     }
 
 };
@@ -117,7 +120,7 @@ struct InterleavedMemoryLayout {
     static constexpr auto Width = sizeof(Members) ;
 
     Members* data{};
-    size_t size{};
+    size_t _size{};
 
     template<Field field>
     [[nodiscard]]
@@ -147,8 +150,13 @@ struct InterleavedMemoryLayout {
     auto restitution() {
         return View<float, Field::Restitution>{ *this };
     }
+
     auto radius() {
         return View<float, Field::Radius>{ *this };
+    }
+
+    size_t size() const {
+        return _size;
     }
 };
 
@@ -225,6 +233,10 @@ struct SeparateFieldMemoryLayout {
 
     auto radius() {
         return View<float, Field::Radius>{ *this };
+    }
+
+    size_t size() const {
+        return data.position.size();
     }
 
 };

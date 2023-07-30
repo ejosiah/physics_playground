@@ -89,6 +89,10 @@ private:
         std::span<glm::vec4> color{};
         VulkanBuffer cBuffer;
         VulkanBuffer buffer;
+        VulkanBuffer radiusBuffer;
+        std::vector<glm::vec2> velocity;
+        std::vector<float> restitution;
+        std::vector<float> inverseMass;
         uint32_t max{100000};
         uint32_t active{0};
     } particles;
@@ -112,6 +116,7 @@ private:
     bool m_gravityOn{true};
     SpacialHashGrid2D grid;
     float m_radius{0.5};
+    int physicsFrame{1};
 };
 
 template<template<typename> typename Layout>
@@ -231,17 +236,23 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 
 template<template<typename> typename Layout>
 void World2D<Layout>::update(float time) {
-    auto dt = time/to<float>(m_numIterations);
+    static float pTime = 0;
 
-    static int count = 0;
-    auto duration = profile<chrono::milliseconds>([&] {
-        for (auto i = 0; i < m_numIterations; i++) {
-            solve(dt);
-        }
-    });
-
-    execTime[count++] = to<double>(duration.count());
-    count %= execTime.size();
+    static int nextPhysicsRun = 0;
+    pTime += time;
+    nextPhysicsRun++;
+    if(nextPhysicsRun%physicsFrame == 0) {
+        static int count = 0;
+        auto dt = pTime/to<float>(m_numIterations);
+        auto duration = profile<chrono::milliseconds>([&] {
+            for (auto i = 0; i < m_numIterations; i++) {
+                solve(dt);
+            }
+        });
+        execTime[count++] = to<double>(duration.count());
+        count %= execTime.size();
+        pTime = 0;
+    }
 }
 
 template<template<typename> typename Layout>
@@ -287,11 +298,18 @@ void World2D<Layout>::createDescriptorPool() {
 template<template<typename> typename Layout>
 void World2D<Layout>::createPipeline() {
     //    @formatter:off
+
+    std::string vertexShader = "shader.vert.spv";
+
+    if constexpr (std::is_same_v<Layout<glm::vec2>, SeparateFieldMemoryLayout2D>){
+        vertexShader = "shader_sep.vert.spv";
+    }
+
     auto builder = device.graphicsPipelineBuilder();
     m_render.pipeline =
             builder
                     .shaderStage()
-                    .vertexShader("shader.vert.spv")
+                    .vertexShader(vertexShader)
                     .fragmentShader("shader.frag.spv")
                     .vertexInputState()
                     .addVertexBindingDescription(0, sizeof(RenderVertex), VK_VERTEX_INPUT_RATE_VERTEX)
@@ -366,11 +384,26 @@ void World2D<Layout>::onSwapChainRecreation() {
 
 template<template<typename> typename Layout>
 void World2D<Layout>::createParticles() {
-    VkDeviceSize size = InterleavedMemoryLayout2D::Width;
-    particles.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, InterleavedMemoryLayout2D::Width * particles.max, "particles");
-    particles.cBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec4) * particles.max, "particle_color");
+    if constexpr (std::is_same_v<Layout<glm::vec2>, InterleavedMemoryLayout2D>) {
+        particles.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                               InterleavedMemoryLayout2D::Width * particles.max, "particles");
+        particles.handle =  createInterleavedMemoryParticle2D(std::span{ reinterpret_cast<InterleavedMemoryLayout2D::Members*>(particles.buffer.map()), particles.max });
+    }else if constexpr (std::is_same_v<Layout<glm::vec2>, SeparateFieldMemoryLayout2D>) {
+        particles.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec2) * particles.max, "particle_position");
+        particles.radiusBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(float) * particles.max, "particle_radius");
+        particles.velocity.resize(particles.max);
+        particles.inverseMass.resize(particles.max);
+        particles.restitution.resize(particles.max);
 
-    particles.handle =  createInterleavedMemoryParticle2D(std::span{ reinterpret_cast<InterleavedMemoryLayout2D::Members*>(particles.buffer.map()), particles.max });
+        particles.handle =
+            createSeparateFieldParticle2D(
+                    std::span{ as<glm::vec2>(particles.buffer.map()), particles.max }
+                    , particles.velocity
+                    , particles.inverseMass
+                    , particles.restitution
+                    , std::span{ as<float>(particles.radiusBuffer.map()), particles.max });
+    }
+    particles.cBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec4) * particles.max, "particle_color");
     particles.color = std::span{ reinterpret_cast<glm::vec4*>(particles.cBuffer.map()), particles.max };
     fillParticles(50);
 }
@@ -399,40 +432,84 @@ void World2D<Layout>::fillParticles(int N, int offset) {
 
 template<template<typename> typename Layout>
 void World2D<Layout>::createDescriptorSetLayout() {
-    m_render.setLayout =
+    if constexpr (std::is_same_v<Layout<glm::vec2>, InterleavedMemoryLayout2D>) {
+        m_render.setLayout =
             device.descriptorSetLayoutBuilder()
-                    .name("particle_set")
-                    .binding(0)
+                .name("particle_set")
+                .binding(0)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .shaderStages(VK_SHADER_STAGE_VERTEX_BIT)
-                    .binding(1)
+                .binding(1)
                     .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                     .descriptorCount(1)
                     .shaderStages(VK_SHADER_STAGE_VERTEX_BIT)
-                    .createLayout();
+            .createLayout();
+
+    }else if constexpr (std::is_same_v<Layout<glm::vec2>, SeparateFieldMemoryLayout2D>) {
+        m_render.setLayout =
+            device.descriptorSetLayoutBuilder()
+                .name("particle_set")
+                .binding(0)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .shaderStages(VK_SHADER_STAGE_VERTEX_BIT)
+                .binding(1)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .shaderStages(VK_SHADER_STAGE_VERTEX_BIT)
+                .binding(2)
+                    .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                    .descriptorCount(1)
+                    .shaderStages(VK_SHADER_STAGE_VERTEX_BIT)
+            .createLayout();
+    }
 }
 
 template<template<typename> typename Layout>
 void World2D<Layout>::updateDescriptorSet() {
     auto sets = m_descriptorPool.allocate({ m_render.setLayout });
     m_render.descriptorSet = sets[0];
+    std::vector<VkWriteDescriptorSet> writes{};
+    if constexpr (std::is_same_v<Layout<glm::vec2>, InterleavedMemoryLayout2D>) {
+        writes = initializers::writeDescriptorSets<2>();
+        writes[0].dstSet = m_render.descriptorSet;
+        writes[0].dstBinding = 0;
+        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writes[0].descriptorCount = 1;
+        VkDescriptorBufferInfo particleInfo{particles.buffer, 0, VK_WHOLE_SIZE};
+        writes[0].pBufferInfo = &particleInfo;
 
+        writes[1].dstSet = m_render.descriptorSet;
+        writes[1].dstBinding = 1;
+        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writes[1].descriptorCount = 1;
+        VkDescriptorBufferInfo colorInfo{particles.cBuffer, 0, VK_WHOLE_SIZE};
+        writes[1].pBufferInfo = &colorInfo;
+    }else if constexpr (std::is_same_v<Layout<glm::vec2>, SeparateFieldMemoryLayout2D>) {
 
-    auto writes = initializers::writeDescriptorSets<2>();
-    writes[0].dstSet = m_render.descriptorSet;
-    writes[0].dstBinding = 0;
-    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writes[0].descriptorCount = 1;
-    VkDescriptorBufferInfo particleInfo{particles.buffer, 0, VK_WHOLE_SIZE};
-    writes[0].pBufferInfo = &particleInfo;
+        writes = initializers::writeDescriptorSets<3>();
+        writes[0].dstSet = m_render.descriptorSet;
+        writes[0].dstBinding = 0;
+        writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writes[0].descriptorCount = 1;
+        VkDescriptorBufferInfo positionInfo{particles.buffer, 0, VK_WHOLE_SIZE};
+        writes[0].pBufferInfo = &positionInfo;
 
-    writes[1].dstSet = m_render.descriptorSet;
-    writes[1].dstBinding = 1;
-    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writes[1].descriptorCount = 1;
-    VkDescriptorBufferInfo colorInfo{particles.cBuffer, 0, VK_WHOLE_SIZE};
-    writes[1].pBufferInfo = &colorInfo;
+        writes[1].dstSet = m_render.descriptorSet;
+        writes[1].dstBinding = 1;
+        writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writes[1].descriptorCount = 1;
+        VkDescriptorBufferInfo radiusInfo{particles.radiusBuffer, 0, VK_WHOLE_SIZE};
+        writes[1].pBufferInfo = &radiusInfo;
+
+        writes[2].dstSet = m_render.descriptorSet;
+        writes[2].dstBinding = 2;
+        writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        writes[2].descriptorCount = 1;
+        VkDescriptorBufferInfo colorInfo{particles.cBuffer, 0, VK_WHOLE_SIZE};
+        writes[2].pBufferInfo = &colorInfo;
+    }
 
     device.updateDescriptorSets(writes);
 }
@@ -478,30 +555,35 @@ void World2D<Layout>::resolveCollision() {
 
 template<template<typename> typename Layout>
 void World2D<Layout>::resolveCollision(int ia, int ib, float restitution) {
-    auto& pa = particles.handle.layout.data[ia];
-    auto& pb = particles.handle.layout.data[ib];
-    glm::vec2 dir = pb.position - pa.position;
+    auto position = particles.handle.position();
+    auto velocity = particles.handle.velocity();
+    auto radius = particles.handle.radius();
+    auto inverseMass = particles.handle.inverseMass();
+
+    auto& pa = position[ia];
+    auto& pb = position[ib];
+    glm::vec2 dir = pb - pa;
     auto d = glm::length(dir);
 
-    if(d == 0 || d > pb.radius + pa.radius) return;
+    if(d == 0 || d > radius[ia] + radius[ib]) return;
 
     dir /= d;
 
-    auto corr = (pb.radius + pa.radius - d) * .5f;
-    pa.position -= dir * corr;
-    pb.position += dir * corr;
+    auto corr = (radius[ib] + radius[ia] - d) * .5f;
+    pa -= dir * corr;
+    pb += dir * corr;
 
-    auto v1 = glm::dot(pa.velocity, dir);
-    auto v2 = glm::dot(pb.velocity, dir);
+    auto v1 = glm::dot(velocity[ia], dir);
+    auto v2 = glm::dot(velocity[ib], dir);
 
-    auto m1 = 1/pa.inverseMass;
-    auto m2 = 1/pb.inverseMass;
+    auto m1 = 1/inverseMass[ia];
+    auto m2 = 1/inverseMass[ib];
 
     auto newV1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * restitution) / (m1 + m2);
     auto newV2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * restitution) / (m1 + m2);
 
-    pa.velocity += dir * (newV1 - v1);
-    pb.velocity += dir * (newV2 - v2);
+    velocity[ia] += dir * (newV1 - v1);
+    velocity[ib] += dir * (newV2 - v2);
 }
 
 template<template<typename> typename Layout>

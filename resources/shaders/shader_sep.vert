@@ -8,7 +8,7 @@ layout(set = 0, binding = 1) buffer ParticleRadiusSSBO {
     float particleRadius[];
 };
 
-layout(set = 0, binding = 1) buffer ParticleColorSSBO {
+layout(set = 0, binding = 2) buffer ParticleColorSSBO {
     vec4 colors[];
 };
 

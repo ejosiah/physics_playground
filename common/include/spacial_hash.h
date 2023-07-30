@@ -60,7 +60,7 @@ public:
 
     template<template<typename> typename Layout>
     void initialize(Particle2D<Layout>& particles) {
-        const auto numObjects = glm::min(particles.layout.size, m_cellEntries.size());
+        const auto numObjects = glm::min(particles.size(), m_cellEntries.size());
 
         std::fill_n(m_counts.begin(), m_counts.size(), 0);
         std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
