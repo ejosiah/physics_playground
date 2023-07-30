@@ -133,7 +133,9 @@ struct InterleavedMemoryLayout {
         float inverseMass{};
         float restitution{1};
         float radius{1};
-        int padding{};
+        int padding0{};
+        int padding1{};
+        int padding2{};
     };
 
     using Members = MembersType;
@@ -156,6 +158,10 @@ struct InterleavedMemoryLayout {
     }
 };
 
+using InterleavedMemoryLayout2D = InterleavedMemoryLayout<glm::vec2>;
+
+template<template<typename> typename Layout>
+using Particle2D = Particles<2, Layout>;
 
 template<glm::length_t L>
 using InterleavedMemoryParticles = Particles<L, InterleavedMemoryLayout>;

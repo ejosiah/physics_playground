@@ -33,14 +33,14 @@ public:
         return glm::abs(h) % static_cast<int32_t>(m_tableSize);
     }
 
-    void initialize(std::span<Particle2D> p) {
-        const auto numObjects = glm::min(p.size(), m_cellEntries.size());
+    void initialize(std::span<glm::vec2> positions) {
+        const auto numObjects = glm::min(positions.size(), m_cellEntries.size());
 
         std::fill_n(m_counts.begin(), m_counts.size(), 0);
         std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
 
         for(auto i = 0; i < numObjects; i++){
-            auto h = hashPosition(p[i].cPosition);
+            auto h = hashPosition(positions[i]);
             m_counts[h]++;
         }
 
@@ -48,16 +48,37 @@ public:
         auto last = m_counts.end();
         std::advance(last, -1);
         std::partial_sum(first, last, first);
-//        auto sum = 0;
-//        for(int i = 0; i < m_tableSize; i++){
-//            m_counts[i] += sum;
-//            sum = m_counts[i];
-//        }
 
         m_counts[m_tableSize] = m_counts[m_tableSize - 1];
 
         for(auto i = 0; i < numObjects; i++){
-            const auto h = hashPosition(p[i].cPosition);
+            const auto h = hashPosition(positions[i]);
+            m_counts[h]--;
+            this->m_cellEntries[this->m_counts[h]] = i;
+        }
+    }
+
+    template<template<typename> typename Layout>
+    void initialize(Particle2D<Layout>& particles) {
+        const auto numObjects = glm::min(particles.data.size, m_cellEntries.size());
+
+        std::fill_n(m_counts.begin(), m_counts.size(), 0);
+        std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
+        const auto positions = particles.position();
+        for(auto i = 0; i < numObjects; i++){
+            auto h = hashPosition(positions[i]);
+            m_counts[h]++;
+        }
+
+        auto first = m_counts.begin();
+        auto last = m_counts.end();
+        std::advance(last, -1);
+        std::partial_sum(first, last, first);
+
+        m_counts[m_tableSize] = m_counts[m_tableSize - 1];
+
+        for(auto i = 0; i < numObjects; i++){
+            const auto h = hashPosition(positions[i]);
             m_counts[h]--;
             this->m_cellEntries[this->m_counts[h]] = i;
         }

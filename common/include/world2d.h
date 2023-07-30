@@ -8,6 +8,7 @@
 #include <type_traits>
 #include "spacial_hash.h"
 #include "types.h"
+#include "particle.h"
 
 using uDimension = glm::uvec2;
 using Dimension = glm::vec2;
@@ -52,7 +53,7 @@ protected:
 
     void resolveCollisionGrid();
 
-    void resolveCollision(Particle2D& pa, Particle2D& pb, float restitution = 1.f);
+    void resolveCollision(int ai, int bi, float restitution = 1.f);
 
     static Dimension computeSimDimensions(float simWidth, Dimension screenDim);
 
@@ -75,7 +76,7 @@ private:
 
 
     struct {
-        std::span<Particle2D> handle{};
+        InterleavedMemoryParticle2D handle;
         std::span<glm::vec4> color{};
         VulkanBuffer cBuffer;
         VulkanBuffer buffer;
@@ -96,7 +97,6 @@ private:
         VulkanDescriptorSetLayout setLayout;
         VkDescriptorSet descriptorSet;
     } m_render;
-    Solver<ArrayOfStructsLayout, SolverType::Basic> solver;
     int m_numIterations{1};
     std::array<double, 100> execTime{};
     float m_restitution{0.8};

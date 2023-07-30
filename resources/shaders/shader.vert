@@ -1,13 +1,15 @@
 #version 460
 
 struct Particle {
-    vec2 pPosition;
     vec2 cPosition;
+    vec2 pPosition;
     vec2 velocity;
     float inverseMass;
     float restitution;
     float radius;
     int padding0;
+    int padding1;
+    int padding2;
 };
 
 layout(set = 0, binding = 0) buffer ParticleSSBO {

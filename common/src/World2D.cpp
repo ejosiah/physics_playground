@@ -6,7 +6,6 @@
 #include "profile.h"
 #include "ImGuiPlugin.hpp"
 #include <memory>
-#include <span>
 
 World2D::World2D(const std::string &title, Dimension simDim, uDimension screenDim)
 : VulkanBaseApp(title, create(screenDim))
@@ -247,13 +246,14 @@ void World2D::onSwapChainRecreation() {
 }
 
 void World2D::createParticles() {
-    particles.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(Particle2D) * particles.max, "particles");
+    VkDeviceSize size = InterleavedMemoryLayout2D::Width;
+    VkDeviceSize size1 = sizeof(Particle2D);
+    particles.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, InterleavedMemoryLayout2D::Width * particles.max, "particles");
     particles.cBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec4) * particles.max, "particle_color");
 
-    particles.handle =  std::span{ reinterpret_cast<Particle2D*>(particles.buffer.map()), particles.max };
+    particles.handle =  createInterleavedMemoryParticle2D(std::span{ reinterpret_cast<InterleavedMemoryLayout2D::Members*>(particles.buffer.map()), particles.max });
     particles.color = std::span{ reinterpret_cast<glm::vec4*>(particles.cBuffer.map()), particles.max };
     fillParticles(50);
-    particles.color[0] = glm::vec4(0);
 }
 
 void World2D::fillParticles(int N, int offset) {
@@ -267,11 +267,10 @@ void World2D::fillParticles(int N, int offset) {
     auto cRand = rng(0, 1, seed + (1 << 11));
     for(int i = offset; i < particles.active; i++){
         glm::vec2 position{ rand(), rand()};
-        particles.handle[i].cPosition = position;
-        particles.handle[i].cPosition = position;
-        particles.handle[i].radius = m_radius;
-        particles.handle[i].velocity = {vRand(), vRand()};
-        particles.handle[i].inverseMass = 1.0;
+        particles.handle.position()[i] = position;
+        particles.handle.radius()[i] = m_radius;
+        particles.handle.velocity()[i] = {vRand(), vRand()};
+        particles.handle.inverseMass()[i] = 1.0;
         particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
 //        particles.color[i] = glm::vec4(1, 0, 0, 1);
     }
@@ -325,22 +324,19 @@ void World2D::solve(float dt) {
     const glm::vec2 G = m_gravityOn ? glm::vec2{0, -9.8} : glm::vec2{1, 1};
     const auto N = particles.active;
 
+    auto position = particles.handle.position();
+    auto velocity = particles.handle.velocity();
     for(int i = 0; i < N; i++){
-        auto& p = particles.handle[i];
-        p.cPosition += p.velocity * dt;
-        p.velocity += G * dt;
-//        for(int j = 0; j < N; j++){
-//            resolveCollision(particles.handle[j], p, m_restitution);
-//        }
-//        boundsCheck(p, std::make_tuple(glm::vec2(0), m_simDim));
+        auto& p = position[i];
+        position[i] += velocity[i] * dt;
+        velocity[i] += G * dt;
     }
 
-//    resolveCollision();
     resolveCollisionGrid();
 
     static auto bounds = std::make_tuple(glm::vec2(0), m_simDim);
     for(int i = 0; i < N; i++){
-        boundsCheck(particles.handle[i], bounds);
+        boundsCheck(particles.handle, bounds, i);
     }
 
 }
@@ -348,18 +344,17 @@ void World2D::solve(float dt) {
 void World2D::resolveCollision() {
     const auto N = particles.active;
     for(auto i = 0; i < N; i++){
-        Particle2D& pa = particles.handle[i];
         for(auto j = 0; j < N; j++){
             if(i == j) continue;
-
-            Particle2D& pb = particles.handle[j];
-            resolveCollision(pa, pb, m_restitution);
+            resolveCollision(i, j, m_restitution);
         }
     }
 }
 
-void World2D::resolveCollision(Particle2D &pa, Particle2D &pb, float restitution) {
-    glm::vec2 dir = pb.cPosition - pa.cPosition;
+void World2D::resolveCollision(int ia, int ib, float restitution) {
+    auto& pa = particles.handle.data.data[ia];
+    auto& pb = particles.handle.data.data[ib];
+    glm::vec2 dir = pb.position - pa.position;
     auto d = glm::length(dir);
 
     if(d == 0 || d > pb.radius + pa.radius) return;
@@ -367,8 +362,8 @@ void World2D::resolveCollision(Particle2D &pa, Particle2D &pb, float restitution
     dir /= d;
 
     auto corr = (pb.radius + pa.radius - d) * .5f;
-    pa.cPosition -= dir * corr;
-    pb.cPosition += dir * corr;
+    pa.position -= dir * corr;
+    pb.position += dir * corr;
 
     auto v1 = glm::dot(pa.velocity, dir);
     auto v2 = glm::dot(pb.velocity, dir);
@@ -384,16 +379,23 @@ void World2D::resolveCollision(Particle2D &pa, Particle2D &pb, float restitution
 }
 
 void World2D::resolveCollisionGrid() {
-    grid.initialize(std::span{ particles.handle.data(), particles.active });
+    grid.initialize(particles.handle);
 
+    auto vPositions = particles.handle.position();
     for(int i = 0; i < particles.active; i++){
-        auto& thisParticle = particles.handle[i];
-        auto ids = grid.query(thisParticle.cPosition, glm::vec2(m_radius * 2));
-        for(int j = 0; j < ids.size(); j++ ){
+        auto& position = vPositions[i];
+        auto ids = grid.query(position, glm::vec2(m_radius * 2));
+        for(int j : ids){
             if(i == j) continue;
-            auto& otherParticle = particles.handle[ids[j]];
-            resolveCollision(thisParticle, otherParticle, m_restitution);
+            resolveCollision(i, j, m_restitution);
         }
     }
+
+//    for(int i = 0; i < N; i++){
+//        for(int j = 0; j < N; j++){
+//            if(j == i) continue;
+//            resolveCollision(i, j, m_restitution);
+//        }
+//    }
 
 }
