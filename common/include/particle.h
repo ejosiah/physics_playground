@@ -43,88 +43,64 @@ struct Iterator : public std::iterator<
     }
 };
 
-
-template<typename ValueType, Field field, typename Layout>
-class View{
-public:
-
-    using iterator = Iterator<ValueType>;
-
-    View(Layout layout)
-    : m_layout{layout}
-    , m_offset(layout.get<field>())
-    {}
-
-    ValueType& operator[](int id) {
-        auto ptr = (m_layout.data + id);
-        return *as<ValueType>(as<char>(ptr) + m_offset);
-    }
-
-    ValueType& operator[](int id) const {
-        auto ptr = (m_layout.data + id);
-        return *as<ValueType>(as<char>(ptr) + m_offset);
-    }
-
-    iterator begin() {
-        ValueType* ptr = &this->operator[](0);
-        iterator itr;
-        itr.ptr = ptr;
-        itr.stride = 1;
-
-        return itr;
-    }
-
-    iterator end() {
-        ValueType* ptr = (&this->operator[](m_layout.size - 1)) + 1;
-        iterator itr;
-        itr.ptr = ptr;
-        itr.stride = 1;
-
-        return itr;
-    }
-
-private:
-    Layout m_layout{};
-    int m_offset{0};
-
-};
-
-
 template<glm::length_t L, template<typename> typename LayoutType>
 struct Particles{
 
     using VecType = glm::vec<L, float>;
     using Layout = LayoutType<VecType>;
 
-    Layout data;
+    Layout layout;
     size_t size;
 
     auto position() {
-        return View<VecType, Field::Position, Layout>{ data };
+        return layout.position();
     }
 
     auto velocity() {
-        return View<VecType, Field::Velocity, Layout>{ data };
+        return layout.velocity();
     }
 
     auto inverseMass() {
-        return View<float, Field::Mass, Layout>{ data };
+        return layout.inverseMass();
     }
 
     auto restitution() {
-        return View<float, Field::Restitution, Layout>{ data };
+        return layout.restitution();
     }
     auto radius() {
-        return View<float, Field::Radius, Layout>{ data };
-
+        return layout.radius();
     }
-
 
 };
 
 template<typename VecType>
 struct InterleavedMemoryLayout {
     using Vec = VecType;
+
+    template<typename ValueType, Field field>
+    class View{
+    public:
+
+        View(InterleavedMemoryLayout layout)
+                : m_layout{layout}
+                , m_offset(layout.get<field>())
+        {}
+
+        ValueType& operator[](int id) {
+            auto ptr = (m_layout.data + id);
+            return *as<ValueType>(as<char>(ptr) + m_offset);
+        }
+
+        ValueType& operator[](int id) const {
+            auto ptr = (m_layout.data + id);
+            return *as<ValueType>(as<char>(ptr) + m_offset);
+        }
+
+    private:
+        InterleavedMemoryLayout m_layout{};
+        int m_offset{0};
+
+    };
 
     struct MembersType {
         Vec position{};
@@ -155,6 +131,25 @@ struct InterleavedMemoryLayout {
             case Field::Radius: return offsetof(Members, radius);
         }
         throw std::runtime_error{ "invalid field" };
+    }
+
+    auto position() {
+        return View<VecType, Field::Position>{ *this };
+    }
+
+    auto velocity() {
+        return View<VecType, Field::Velocity>{ *this };
+    }
+
+    auto inverseMass() {
+        return View<float, Field::Mass>{ *this };
+    }
+
+    auto restitution() {
+        return View<float, Field::Restitution>{ *this };
+    }
+    auto radius() {
+        return View<float, Field::Radius>{ *this };
     }
 };
 

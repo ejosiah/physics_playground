@@ -352,8 +352,8 @@ void World2D::resolveCollision() {
 }
 
 void World2D::resolveCollision(int ia, int ib, float restitution) {
-    auto& pa = particles.handle.data.data[ia];
-    auto& pb = particles.handle.data.data[ib];
+    auto& pa = particles.handle.layout.data[ia];
+    auto& pb = particles.handle.layout.data[ib];
     glm::vec2 dir = pb.position - pa.position;
     auto d = glm::length(dir);
 
