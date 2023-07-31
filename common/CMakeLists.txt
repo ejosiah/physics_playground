@@ -7,6 +7,10 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/include)
 
 set(COMMON_INCLUDE_DIRS $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
+if(MSVC)
+    add_compile_options(/Qpar /Qpar-report:2)
+endif()
+
 
 add_library(common ${HPP_FILES} ${CPP_FILES})
 target_link_libraries(common VulkanBase ImGuiPlugin Vulkan::Vulkan ${CONAN_LIBS})

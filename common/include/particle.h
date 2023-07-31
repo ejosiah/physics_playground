@@ -9,7 +9,7 @@
 #include "types.h"
 #include <stdexcept>
 
-enum class Field : int { Position = 0, Velocity, Mass, Restitution, Radius };
+enum class Field : int { Position = 0, PreviousPosition, Velocity, Mass, Restitution, Radius };
 
 using OffsetStride = std::tuple<int, int>;
 
@@ -49,10 +49,21 @@ struct Particles{
     using VecType = glm::vec<L, float>;
     using Layout = LayoutType<VecType>;
 
+    using Position = Layout::template View<VecType, Field::Position>;
+    using PreviousPosition = Layout::template View<VecType, Field::PreviousPosition>;
+    using Velocity = Layout::template View<VecType, Field::Velocity>;
+    using InverseMass = Layout::template View<float, Field::Mass>;
+    using Restitution = Layout::template View<float, Field::Restitution>;
+    using Radius = Layout::template View<float, Field::Radius>;
+
     Layout layout;
 
     auto position() {
         return layout.position();
+    }
+
+    auto previousPosition() {
+        return layout.previousPosition();
     }
 
     auto velocity() {
@@ -127,6 +138,7 @@ struct InterleavedMemoryLayout {
     constexpr int get() const {
         switch(field){
             case Field::Position: return offsetof(Members, position);
+            case Field::PreviousPosition: return offsetof(Members, prePosition);
             case Field::Velocity: return offsetof(Members, velocity);
             case Field::Mass: return offsetof(Members, inverseMass);
             case Field::Restitution: return offsetof(Members, restitution);
@@ -137,6 +149,11 @@ struct InterleavedMemoryLayout {
 
     auto position() {
         return View<VecType, Field::Position>{ *this };
+    }
+
+    auto previousPosition() {
+        return View<VecType, Field::PreviousPosition>{ *this };
+
     }
 
     auto velocity() {
@@ -155,7 +172,7 @@ struct InterleavedMemoryLayout {
         return View<float, Field::Radius>{ *this };
     }
 
-    size_t size() const {
+    [[nodiscard]] size_t size() const {
         return _size;
     }
 };
@@ -207,6 +224,7 @@ struct SeparateFieldMemoryLayout {
     constexpr ValueType* get() const {
         switch(field){
             case Field::Position: return as<ValueType>(data.position.data());
+            case Field::PreviousPosition: return as<ValueType>(data.prePosition.data());
             case Field::Velocity: return as<ValueType>(data.velocity.data());
             case Field::Mass: return as<ValueType>(data.inverseMass.data());
             case Field::Restitution: return as<ValueType>(data.restitution.data());
@@ -217,6 +235,11 @@ struct SeparateFieldMemoryLayout {
 
     auto position() {
         return View<VecType, Field::Position>{ *this };
+    }
+
+    auto previousPosition() {
+        return View<VecType, Field::PreviousPosition>{ *this };
+
     }
 
     auto velocity() {
@@ -272,4 +295,33 @@ inline SeparateFieldParticle2D createSeparateFieldParticle2D(std::span<glm::vec2
                                                              , std::span<float> restitution
                                                              , std::span<float> radius) {
     return { { positions, positions, velocity, inverseMass, restitution, radius }};
+}
+
+template<template<typename> typename Layout>
+inline void boundsCheck(Particle2D<Layout>& particle, const Bounds2D& bounds, int i) {
+    auto [min, max] = bounds;
+
+    auto radius = particle.radius()[i];
+    auto& position = particle.position()[i];
+    auto& velocity = particle.velocity()[i];
+
+    min += radius;
+    max -= radius;
+    auto& p = position;
+    if(p.x < min.x){
+        p.x = min.x;
+        velocity.x *= -1;
+    }
+    if(p.x > max.x){
+        p.x = max.x;
+        velocity.x *= -1;
+    }
+    if(p.y < min.y){
+        p.y = min.y;
+        velocity.y *= -1;
+    }
+    if(p.y > max.y){
+        p.y = max.y;
+        velocity.y *= -1;
+    }
 }

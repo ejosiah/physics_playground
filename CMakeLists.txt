@@ -28,3 +28,4 @@ compile_glsl_directory(SRC_DIR "${GLSL_SOURCE_DIR}" OUT_DIR "${SPV_DIR}" INCLUDE
 add_subdirectory(dependencies)
 add_subdirectory(common)
 add_subdirectory(physics)
+add_subdirectory(profiling)

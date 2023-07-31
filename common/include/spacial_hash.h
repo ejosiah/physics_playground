@@ -7,11 +7,15 @@
 #include <span>
 #include <fmt/format.h>
 #include "particle.h"
+#include <boost/functional/hash.hpp>
+#include <type_traits>
 
+template<bool Unbounded = true>
 class SpacialHashGrid2D {
 public:
     SpacialHashGrid2D() = default;
 
+    template<typename  = std::enable_if<Unbounded>>
     SpacialHashGrid2D(float spacing, int32_t maxNumObjects)
     : m_spacing(spacing)
     , m_tableSize(2 * maxNumObjects)
@@ -20,7 +24,6 @@ public:
     , m_queryIds(maxNumObjects)
     , m_querySize(0)
     {}
-
 
     [[nodiscard]]
     int32_t hashPosition(glm::vec2 position) const {
@@ -59,8 +62,8 @@ public:
     }
 
     template<template<typename> typename Layout>
-    void initialize(Particle2D<Layout>& particles) {
-        const auto numObjects = glm::min(particles.size(), m_cellEntries.size());
+    void initialize(Particle2D<Layout>& particles, size_t size) {
+        const auto numObjects = glm::min(size, m_cellEntries.size());
 
         std::fill_n(m_counts.begin(), m_counts.size(), 0);
         std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
@@ -139,4 +142,5 @@ private:
     std::vector<int32_t> m_cellEntries{};
     std::vector<int32_t> m_queryIds{};
     uint32_t m_querySize{};
+    glm::ivec2 _size{};
 };
