@@ -18,26 +18,16 @@ World2D<Layout>::World2D(const std::string &title, Dimension simDim, uDimension 
 
 template<template<typename> typename Layout>
 void World2D<Layout>::initApp() {
-//    spdlog::info("initializing world!");
-
     initCamera();
-//    spdlog::info("camera initialized");
     createParticles();
-//    spdlog::info("particles initialized");
     initVertexBuffer();
-//    spdlog::info("vertex initialized");
     createDescriptorPool();
-//    spdlog::info("descriptor pool initialized");
     createCommandPool();
-//    spdlog::info("command pool initialized");
 
     createDescriptorSetLayout();
-//    spdlog::info("descriptorSet layout initialized");
     updateDescriptorSet();
-//    spdlog::info("update descriptorSet initialized");
 
     createPipeline();
-//    spdlog::info("world initialized");
 }
 
 template<template<typename> typename Layout>
@@ -146,14 +136,11 @@ void World2D<Layout>::update(float time) {
     static int nextPhysicsRun = 0;
     pTime += time;
     nextPhysicsRun++;
+    float dt = 1.0/240;
     if(nextPhysicsRun%physicsFrame == 0) {
         static int count = 0;
-        auto dt = pTime/to<float>(m_numIterations);
         auto duration = profile<chrono::milliseconds>([&] {
-//            for (auto i = 0; i < m_numIterations; i++) {
-//                solve(dt);
-//            }
-              solver->update(dt);
+              solver->run(time);
         });
         execTime[count++] = to<double>(duration.count());
         count %= execTime.size();
@@ -346,6 +333,7 @@ void World2D<Layout>::fillParticles(int N, int offset) {
         particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
 //        particles.color[i] = glm::vec4(1, 0, 0, 1);
     }
+    particles.color[0] = glm::vec4(0);
 }
 
 template<template<typename> typename Layout>

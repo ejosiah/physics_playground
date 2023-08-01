@@ -49,6 +49,8 @@ struct Particles{
     using VecType = glm::vec<L, float>;
     using Layout = LayoutType<VecType>;
 
+    using Members = Layout::Members;
+
     using Position = Layout::template View<VecType, Field::Position>;
     using PreviousPosition = Layout::template View<VecType, Field::PreviousPosition>;
     using Velocity = Layout::template View<VecType, Field::Velocity>;
@@ -191,9 +193,45 @@ struct SeparateFieldMemoryLayout {
     };
 
     using Members = MemberType;
-    static constexpr auto Width = sizeof(Vec) * 3 + sizeof(float) * 3;
+    static constexpr auto Width = (sizeof(Vec) + sizeof(float)) * 3;
 
     Members data{};
+    SeparateFieldMemoryLayout() = default;
+
+    SeparateFieldMemoryLayout(std::span<Vec> position
+                              , std::span<Vec> prePosition
+                              , std::span<Vec> velocity
+                              , std::span<float> inverseMass
+                              , std::span<float> restitution
+                              , std::span<float> radius
+    )
+    {
+        data = Members { position, prePosition, velocity, inverseMass, restitution, radius};
+    }
+
+    SeparateFieldMemoryLayout(size_t size)
+    {
+        int offset = 0;
+        allocation.resize(size * Width);
+        auto ptr = allocation.data();
+        data.position = { as<Vec>(ptr), size };
+        ptr += size * sizeof(Vec);
+
+        data.prePosition = { as<Vec>(ptr), size };
+        ptr += size * sizeof(Vec);
+
+        data.velocity = { as<Vec>(ptr), size};
+        ptr += size * sizeof(Vec);
+
+        data.inverseMass = { as<float>(ptr), size};
+        ptr += size * sizeof(float);
+
+        data.restitution = { as<float>(ptr), size};
+        ptr += size * sizeof(float);
+
+        data.radius = { as<float>(ptr), size};
+    }
+
 
     template<typename ValueType, Field field>
     class View{
@@ -215,6 +253,7 @@ struct SeparateFieldMemoryLayout {
     private:
         SeparateFieldMemoryLayout m_layout{};
         ValueType* m_ptr{0};
+
     };
 
 
@@ -258,9 +297,13 @@ struct SeparateFieldMemoryLayout {
         return View<float, Field::Radius>{ *this };
     }
 
+    [[nodiscard]]
     size_t size() const {
         return data.position.size();
     }
+
+private:
+    std::vector<char> allocation;
 
 };
 
@@ -294,34 +337,9 @@ inline SeparateFieldParticle2D createSeparateFieldParticle2D(std::span<glm::vec2
                                                              , std::span<float> inverseMass
                                                              , std::span<float> restitution
                                                              , std::span<float> radius) {
-    return { { positions, positions, velocity, inverseMass, restitution, radius }};
+    return { { positions, {}, velocity, inverseMass, restitution, radius }};
 }
 
-template<template<typename> typename Layout>
-inline void boundsCheck(Particle2D<Layout>& particle, const Bounds2D& bounds, int i) {
-    auto [min, max] = bounds;
-
-    auto radius = particle.radius()[i];
-    auto& position = particle.position()[i];
-    auto& velocity = particle.velocity()[i];
-
-    min += radius;
-    max -= radius;
-    auto& p = position;
-    if(p.x < min.x){
-        p.x = min.x;
-        velocity.x *= -1;
-    }
-    if(p.x > max.x){
-        p.x = max.x;
-        velocity.x *= -1;
-    }
-    if(p.y < min.y){
-        p.y = min.y;
-        velocity.y *= -1;
-    }
-    if(p.y > max.y){
-        p.y = max.y;
-        velocity.y *= -1;
-    }
+inline SeparateFieldParticle2D createSeparateFieldParticle2D(size_t numParticles){
+    return { { numParticles } };
 }

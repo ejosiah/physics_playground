@@ -8,6 +8,36 @@
 #include <memory>
 #include <span>
 #include "spacial_hash.h"
+#include <spdlog/spdlog.h>
+
+template<template<typename> typename Layout>
+inline void boundsCheck(Particle2D<Layout>& particle, const Bounds2D& bounds, int i) {
+    auto [min, max] = bounds;
+
+    auto radius = particle.radius()[i];
+    auto& position = particle.position()[i];
+    auto& velocity = particle.velocity()[i];
+
+    min += radius;
+    max -= radius;
+    auto& p = position;
+    if(p.x < min.x){
+        p.x = min.x;
+        velocity.x *= -1;
+    }
+    if(p.x > max.x){
+        p.x = max.x;
+        velocity.x *= -1;
+    }
+    if(p.y < min.y){
+        p.y = min.y;
+        velocity.y *= -1;
+    }
+    if(p.y > max.y){
+        p.y = max.y;
+        velocity.y *= -1;
+    }
+}
 
 constexpr float Gravity{-9.8};
 
@@ -37,7 +67,7 @@ public:
 
     virtual ~Solver2D() = default;
 
-    void update(float dt);
+    void run(float dt);
 
     virtual void solve(float dt);
 
@@ -49,7 +79,7 @@ public:
 
     void resolveCollision();
 
-    void resolveCollision(int ai, int bi);
+    void resolveCollision(int ia, int ib);
 
     void numParticles(int value) {
         assert(value <= 0);
@@ -98,8 +128,8 @@ public:
     void integrate(float dt) final;
 };
 
-//using SeparateFieldMemoryLayoutBasicSolver = BasicSolver<SeparateFieldMemoryLayout>;
-//using InterleavedMemoryLayoutBasicSolver = BasicSolver<InterleavedMemoryLayout>;
+using SeparateFieldMemoryLayoutBasicSolver = BasicSolver<SeparateFieldMemoryLayout>;
+using InterleavedMemoryLayoutBasicSolver = BasicSolver<InterleavedMemoryLayout>;
 
 
 template<template<typename> typename Layout>
@@ -124,7 +154,7 @@ Solver2D<Layout>::Solver2D(Particle2D<Layout> particles
 }
 
 template<template<typename> typename Layout>
-void Solver2D<Layout>::update(float dt) {
+void Solver2D<Layout>::run(float dt) {
     const auto N = m_iterations;
     const auto sdt = dt/to<float>(N);
 
@@ -219,7 +249,7 @@ template<template<typename> typename Layout>
 void BasicSolver<Layout>::integrate(float dt) {
     const auto N = this->m_numParticles;
     const glm::vec2 G = glm::vec2{0, -9.8};
-//#pragma loop(hint_parallel(8))
+#pragma loop(hint_parallel(8))
     for(int i = 0; i < N; i++){
         this->m_position[i] += this->m_velocity[i] * dt;
         this->m_velocity[i] += G * dt;
