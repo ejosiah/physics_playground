@@ -69,13 +69,13 @@ public:
 
     void run(float dt);
 
+    virtual void preSolve(float dt){}
+
     virtual void solve(float dt);
 
+    virtual void postSolve(float dt) {}
+
     virtual void integrate(float dt) = 0;
-
-    virtual glm::vec2 getVelocity(int index) const;
-
-    virtual void updateVelocity(int index, glm::vec2 value);
 
     void resolveCollision();
 
@@ -128,6 +128,26 @@ public:
     void integrate(float dt) final;
 };
 
+template<template<typename> typename Layout>
+class VarletIntegrationSolver : public Solver2D<Layout> {
+public:
+    VarletIntegrationSolver() = default;
+
+    ~VarletIntegrationSolver() final = default;
+
+    VarletIntegrationSolver(Particle2D<Layout> particles
+    , Bounds2D worldBounds
+    , int numParticles
+    , float maxRadius
+    , int iterations = 1);
+
+
+    void postSolve(float dt) final;
+
+    void integrate(float dt) final;
+};
+
+
 using SeparateFieldMemoryLayoutBasicSolver = BasicSolver<SeparateFieldMemoryLayout>;
 using InterleavedMemoryLayoutBasicSolver = BasicSolver<InterleavedMemoryLayout>;
 
@@ -165,8 +185,10 @@ void Solver2D<Layout>::run(float dt) {
 
 template<template<typename> typename Layout>
 void Solver2D<Layout>::solve(float dt) {
+    preSolve(dt);
     integrate(dt);
     resolveCollision();
+    postSolve(dt);
 }
 
 template<template<typename> typename Layout>
@@ -231,16 +253,6 @@ void Solver2D<Layout>::resolveCollision(int ia, int ib) {
 }
 
 template<template<typename> typename Layout>
-glm::vec2 Solver2D<Layout>::getVelocity(int index) const {
-    return m_velocity[index];
-}
-
-template<template<typename> typename Layout>
-void Solver2D<Layout>::updateVelocity(int index, glm::vec2 value) {
-    m_velocity[index] = value;
-}
-
-template<template<typename> typename Layout>
 BasicSolver<Layout>::BasicSolver(Particle2D<Layout> particles, Bounds2D worldBounds, int numParticles, float maxRadius, int iterations)
 : Solver2D<Layout>(particles, worldBounds, numParticles, maxRadius, iterations)
 {}
@@ -253,5 +265,36 @@ void BasicSolver<Layout>::integrate(float dt) {
     for(int i = 0; i < N; i++){
         this->m_position[i] += this->m_velocity[i] * dt;
         this->m_velocity[i] += G * dt;
+    }
+}
+
+template<template<typename> typename Layout>
+VarletIntegrationSolver<Layout>::VarletIntegrationSolver(Particle2D<Layout> particles, Bounds2D worldBounds,
+                                                         int numParticles, float maxRadius, int iterations)
+:Solver2D<Layout>(particles, worldBounds, numParticles, maxRadius, iterations)
+{}
+
+
+template<template<typename> typename Layout>
+void VarletIntegrationSolver<Layout>::integrate(float dt) {
+    const auto N = this->m_numParticles;
+    const glm::vec2 G = glm::vec2{0, -9.8};
+
+    for(int i = 0; i < N; i++){
+        auto p0 = this->m_prevPosition[i];
+        auto p1 = this->m_position[i];
+        auto p2 = 2 * p1 - p0 + G * dt * dt;
+        this->m_position[i] = p2;
+        this->m_prevPosition[i] = p1;
+        this->m_velocity[i] = (p2 - p1)/dt;
+    }
+}
+
+template<template<typename> typename Layout>
+void VarletIntegrationSolver<Layout>::postSolve(float dt) {
+    const auto N = this->m_numParticles;
+
+    for(int i = 0; i < N; i++){
+        this->m_prevPosition[i] = this->m_position[i] - this->m_velocity[i] * dt;
     }
 }

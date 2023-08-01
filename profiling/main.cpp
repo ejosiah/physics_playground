@@ -1,6 +1,6 @@
+#include "solver2d.h"
 #include <benchmark/benchmark.h>
 #include <glm/glm.hpp>
-#include "solver2d.h"
 #include <random>
 #include <tuple>
 
@@ -25,6 +25,7 @@ auto createParticles(int numParticles) {
    static std::vector<float> restitution(numParticles, 0.8);
    static std::vector<float> radius(numParticles, 0.5);
    static std::vector<InterleavedMemoryLayout2D::Members> members(numParticles);
+   static std::vector<char> allocation(SeparateFieldMemoryLayout2D::allocationSize(numParticles));
 
 
     auto pRand = rng(0, 20, 1 << 20);
@@ -46,7 +47,8 @@ auto createParticles(int numParticles) {
         }
         return createInterleavedMemoryParticle2D( members );
     }else if constexpr (std::is_same_v<Layout<glm::vec2>, SeparateFieldMemoryLayout2D>) {
-        auto particles = createSeparateFieldParticle2D(numParticles);
+//        auto particles = createSeparateFieldParticle2D(numParticles);
+        auto particles = createSeparateFieldParticle2D(allocation);
         for(auto i = 0; i < numParticles; ++i){
             particles.position()[i] = position[i];
             particles.previousPosition()[i] = position[i];

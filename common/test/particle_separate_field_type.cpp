@@ -112,6 +112,4 @@ TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutWithInternalMemoryAllocatio
     ASSERT_FLOAT_EQ(radius[0], 0);
     radius[0] = 1.0;
     ASSERT_FLOAT_EQ(radius[0], 1.0);
-
-
 }

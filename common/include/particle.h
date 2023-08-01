@@ -212,8 +212,18 @@ struct SeparateFieldMemoryLayout {
     SeparateFieldMemoryLayout(size_t size)
     {
         int offset = 0;
-        allocation.resize(size * Width);
-        auto ptr = allocation.data();
+        memory.resize(size * Width);
+        allocate(memory);
+    }
+
+    SeparateFieldMemoryLayout(std::span<char> memory){
+        assert(!memory.empty() && memory.size() % Width == 0);
+        allocate(memory);
+    }
+
+    void allocate(std::span<char> memory){
+        const auto size = memory.size()/Width;
+        auto ptr = memory.data();
         data.position = { as<Vec>(ptr), size };
         ptr += size * sizeof(Vec);
 
@@ -231,6 +241,8 @@ struct SeparateFieldMemoryLayout {
 
         data.radius = { as<float>(ptr), size};
     }
+
+    static constexpr size_t allocationSize(size_t size) { return Width * size; }
 
 
     template<typename ValueType, Field field>
@@ -303,7 +315,7 @@ struct SeparateFieldMemoryLayout {
     }
 
 private:
-    std::vector<char> allocation;
+    std::vector<char> memory;
 
 };
 
@@ -342,4 +354,7 @@ inline SeparateFieldParticle2D createSeparateFieldParticle2D(std::span<glm::vec2
 
 inline SeparateFieldParticle2D createSeparateFieldParticle2D(size_t numParticles){
     return { { numParticles } };
+}
+inline SeparateFieldParticle2D createSeparateFieldParticle2D(std::span<char> memory){
+    return { { memory } };
 }

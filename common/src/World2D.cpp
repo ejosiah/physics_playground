@@ -146,6 +146,7 @@ void World2D<Layout>::update(float time) {
         count %= execTime.size();
         pTime = 0;
     }
+    transferStateToGPU();
 
     static float newBalls = 0;
 //    newBalls += time;
@@ -154,6 +155,16 @@ void World2D<Layout>::update(float time) {
 
         fillParticles(50, particles.active);
     }
+}
+template<template<typename> typename Layout>
+void World2D<Layout>::transferStateToGPU() {
+    particles.pBuffer.copy(particles.position);
+    particles.rBuffer.copy(particles.radius);
+
+    device.graphicsCommandPool().oneTimeCommand([&](auto commandBuffer){
+        device.copy(particles.pBuffer, particles.buffer, particles.pBuffer.size);
+        device.copy(particles.rBuffer, particles.radiusBuffer, particles.radiusBuffer.size);
+    });
 }
 
 template<template<typename> typename Layout>
@@ -290,19 +301,28 @@ void World2D<Layout>::createParticles() {
                                                InterleavedMemoryLayout2D::Width * particles.max, "particles");
         particles.handle =  createInterleavedMemoryParticle2D(std::span{ reinterpret_cast<InterleavedMemoryLayout2D::Members*>(particles.buffer.map()), particles.max });
     }else if constexpr (std::is_same_v<Layout<glm::vec2>, SeparateFieldMemoryLayout2D>) {
-        particles.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec2) * particles.max, "particle_position");
-        particles.radiusBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(float) * particles.max, "particle_radius");
+        particles.pBuffer = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY, sizeof(glm::vec2) * particles.max, "cpu_particle_position");
+        particles.rBuffer = device.createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY, sizeof(float) * particles.max, "cpu_particle_radius");
+
+        particles.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY, sizeof(glm::vec2) * particles.max, "particle_position");
+        particles.radiusBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY, sizeof(float) * particles.max, "particle_radius");
+        particles.position.resize(particles.max);
+        particles.prevPosition.resize(particles.max);
         particles.velocity.resize(particles.max);
         particles.inverseMass.resize(particles.max);
         particles.restitution.resize(particles.max);
+        particles.radius.resize(particles.max);
 
         particles.handle =
                 createSeparateFieldParticle2D(
-                        std::span{ as<glm::vec2>(particles.buffer.map()), particles.max }
+//                        std::span{ as<glm::vec2>(particles.pBuffer.map()), particles.max }
+                        particles.position
                         , particles.velocity
                         , particles.inverseMass
                         , particles.restitution
-                        , std::span{ as<float>(particles.radiusBuffer.map()), particles.max });
+//                        , std::span{ as<float>(particles.rBuffer.map()), particles.max }
+                        , particles.radius
+                        );
     }
     particles.cBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec4) * particles.max, "particle_color");
     particles.color = std::span{ reinterpret_cast<glm::vec4*>(particles.cBuffer.map()), particles.max };

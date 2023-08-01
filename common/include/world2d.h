@@ -58,6 +58,8 @@ protected:
 
     void update(float time) override;
 
+    void transferStateToGPU();
+
     static Dimension computeSimDimensions(float simWidth, Dimension screenDim);
 
 private:
@@ -84,10 +86,15 @@ private:
         std::span<glm::vec4> color{};
         VulkanBuffer cBuffer;
         VulkanBuffer buffer;
+        VulkanBuffer pBuffer;
+        VulkanBuffer rBuffer;
         VulkanBuffer radiusBuffer;
+        std::vector<glm::vec2> position;
+        std::vector<glm::vec2> prevPosition;
         std::vector<glm::vec2> velocity;
         std::vector<float> restitution;
         std::vector<float> inverseMass;
+        std::vector<float> radius;
         uint32_t max{100000};
         uint32_t active{0};
     } particles;
