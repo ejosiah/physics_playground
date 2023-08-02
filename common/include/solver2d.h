@@ -283,7 +283,7 @@ void VarletIntegrationSolver<Layout>::integrate(float dt) {
     for(int i = 0; i < N; i++){
         auto p0 = this->m_prevPosition[i];
         auto p1 = this->m_position[i];
-        auto p2 = 2 * p1 - p0 + G * dt * dt;
+        auto p2 = 2.f * p1 - p0 + G * dt * dt;
         this->m_position[i] = p2;
         this->m_prevPosition[i] = p1;
         this->m_velocity[i] = (p2 - p1)/dt;

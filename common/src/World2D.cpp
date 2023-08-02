@@ -136,11 +136,11 @@ void World2D<Layout>::update(float time) {
     static int nextPhysicsRun = 0;
     pTime += time;
     nextPhysicsRun++;
-    float dt = 1.0/240;
+    const auto dt = time;
     if(nextPhysicsRun%physicsFrame == 0) {
         static int count = 0;
         auto duration = profile<chrono::milliseconds>([&] {
-              solver->run(time);
+              solver->run(dt);
         });
         execTime[count++] = to<double>(duration.count());
         count %= execTime.size();
@@ -315,12 +315,11 @@ void World2D<Layout>::createParticles() {
 
         particles.handle =
                 createSeparateFieldParticle2D(
-//                        std::span{ as<glm::vec2>(particles.pBuffer.map()), particles.max }
                         particles.position
+                        , particles.prevPosition
                         , particles.velocity
                         , particles.inverseMass
                         , particles.restitution
-//                        , std::span{ as<float>(particles.rBuffer.map()), particles.max }
                         , particles.radius
                         );
     }
@@ -345,13 +344,14 @@ void World2D<Layout>::fillParticles(int N, int offset) {
     auto cRand = rng(0, 1, seed + (1 << 11));
     for(int i = offset; i < particles.active; i++){
         glm::vec2 position{ rand(), rand()};
+        glm::vec2 velocity{ vRand(), vRand() };
         particles.handle.position()[i] = position;
+        particles.handle.previousPosition()[i] = position - velocity * 0.016667f;
+        particles.handle.velocity()[i] = velocity;
         particles.handle.radius()[i] = m_radius;
-        particles.handle.velocity()[i] = {vRand(), vRand()};
         particles.handle.inverseMass()[i] = 1.0;
         particles.handle.restitution()[i] = m_restitution;
         particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
-//        particles.color[i] = glm::vec4(1, 0, 0, 1);
     }
     particles.color[0] = glm::vec4(0);
 }

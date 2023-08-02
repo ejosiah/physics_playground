@@ -345,11 +345,12 @@ inline InterleavedMemoryParticle2D createInterleavedMemoryParticle2D(std::span<t
 }
 
 inline SeparateFieldParticle2D createSeparateFieldParticle2D(std::span<glm::vec2> positions
+                                                             , std::span<glm::vec2> prevPosition
                                                              , std::span<glm::vec2> velocity
                                                              , std::span<float> inverseMass
                                                              , std::span<float> restitution
                                                              , std::span<float> radius) {
-    return { { positions, {}, velocity, inverseMass, restitution, radius }};
+    return { { positions, prevPosition, velocity, inverseMass, restitution, radius }};
 }
 
 inline SeparateFieldParticle2D createSeparateFieldParticle2D(size_t numParticles){

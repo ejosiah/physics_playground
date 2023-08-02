@@ -2,7 +2,7 @@
 
 TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutPositionView) {
     std::vector<glm::vec2> positions{glm::vec2{0}, glm::vec2{1}, glm::vec3{3}};
-    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( positions, {}, {}, {}, {} );
+    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( positions, {}, {}, {}, {}, {} );
 
     auto view = particles.position();
 
@@ -23,7 +23,7 @@ TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutPositionView) {
 TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutVelocityView) {
     std::vector<glm::vec2> velocity{ glm::vec3(0.5), glm::vec2(1.2, 2.6),  glm::vec2(0.7, 0.1)};
 
-    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( {}, velocity, {}, {}, {} );
+    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( {}, {}, velocity, {}, {}, {} );
     auto view = particles.velocity();
 
     ASSERT_FLOAT_EQ(view[0].x, 0.5);
@@ -38,7 +38,7 @@ TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutVelocityView) {
 
 TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutMassView) {
     std::vector<float> inverseMass{0.1, 2.5, 0.01};
-    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( {}, {}, inverseMass, {}, {} );
+    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( {}, {}, {}, inverseMass, {}, {} );
     auto view = particles.inverseMass();
 
     ASSERT_FLOAT_EQ(view[0], 0.1);
@@ -48,7 +48,7 @@ TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutMassView) {
 
 TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutRestitutionView) {
     std::vector<float> restitution{ 0.8, 0.99, 0.5};
-    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( {}, {}, {}, restitution, {} );
+    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( {}, {}, {}, {}, restitution, {} );
 
     auto view = particles.restitution();
 
@@ -59,7 +59,7 @@ TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutRestitutionView) {
 
 TEST_F(ParticleTypeFixture, SeparateFieldMemoryLayoutRadiusView) {
     std::vector<float> radius{ 1.0, 2.5, 0.123 };
-    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( {}, {}, {}, {}, radius );
+    SeparateFieldParticle2D particles = createSeparateFieldParticle2D( {}, {}, {}, {}, {}, radius );
 
     auto view = particles.radius();
 
