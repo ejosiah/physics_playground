@@ -326,7 +326,6 @@ void World2D<Layout>::createParticles() {
     particles.cBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec4) * particles.max, "particle_color");
     particles.color = std::span{ reinterpret_cast<glm::vec4*>(particles.cBuffer.map()), particles.max };
     fillParticles(startParticles);
-    grid = SpacialHashGrid2D{m_radius * 2, to<int32_t>(particles.max) };
 
     solver = std::make_unique<BasicSolver<Layout>>(particles.handle, std::make_tuple(glm::vec2(0), m_simDim)
                                                    , to<int>(particles.active), m_radius, m_numIterations);

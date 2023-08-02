@@ -118,7 +118,6 @@ private:
 
     float m_restitution{0.8};
     bool m_gravityOn{true};
-    SpacialHashGrid2D<> grid;
     float m_radius{0.5};
     int physicsFrame{1};
 };

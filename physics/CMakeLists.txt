@@ -1,2 +1,2 @@
-add_executable(physics main.cpp)
-target_link_libraries(physics common)
+add_subdirectory(demo)
+add_subdirectory(closing_velocity)

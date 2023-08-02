@@ -25,13 +25,30 @@ public:
     , m_querySize(0)
     {}
 
+    template<typename = std::enable_if<!Unbounded>>
+    SpacialHashGrid2D(float spacing, glm::ivec2 gridSize)
+    : m_spacing(spacing)
+    , m_gridSize(gridSize)
+    , m_tableSize(gridSize.x * gridSize.y)
+    , m_counts(gridSize.x * gridSize.y + 1)
+    , m_cellEntries(gridSize.x * gridSize.y)
+    , m_queryIds(gridSize.x * gridSize.y)
+    , m_querySize(0)
+    {}
+
+
     [[nodiscard]]
     int32_t hashPosition(glm::vec2 position) const {
-        return hashCoords(intCoords(position));
+        auto pid = intCoords(position);
+        if constexpr (Unbounded) {
+            return hash(pid);
+        }else {
+            return pid.x * m_gridSize.y + pid.y;
+        }
     }
 
     [[nodiscard]]
-    int32_t hashCoords(glm::ivec2 pid) const {
+    int32_t hash(glm::ivec2 pid) const {
         const auto h = (pid.x * 92837111) ^ (pid.y * 689287499);	// fantasy function
         return glm::abs(h) % static_cast<int32_t>(m_tableSize);
     }
@@ -46,7 +63,6 @@ public:
             auto h = hashPosition(positions[i]);
             m_counts[h]++;
         }
-
         auto first = m_counts.begin();
         auto last = m_counts.end();
         std::advance(last, -1);
@@ -101,7 +117,7 @@ public:
 
         for(auto xi = d0.x; xi <= d1.x; ++xi){
             for(auto yi = d0.y; yi <= d1.y; ++yi){
-                const auto h = hashCoords({xi, yi});
+                const auto h = hashPosition({xi, yi});
                 const auto start = m_counts[h];
                 const auto end = m_counts[h + 1];
 
@@ -142,5 +158,9 @@ private:
     std::vector<int32_t> m_cellEntries{};
     std::vector<int32_t> m_queryIds{};
     uint32_t m_querySize{};
-    glm::ivec2 _size{};
+    glm::ivec2 m_gridSize{};
 };
+
+
+using BoundedSpacialHashGrid2D = SpacialHashGrid2D<false>;
+using UnBoundedSpacialHashGrid2D = SpacialHashGrid2D<true>;
