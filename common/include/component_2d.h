@@ -4,9 +4,15 @@
 #include <entt/entt.hpp>
 #include <vector>
 
-struct Color : public glm::vec4 {};
-struct Position : public glm::vec2 {};
-struct Velocity : public glm::vec2 {};
+struct Color {
+    float r, g, b, a;
+};
+struct Position {
+    float x, y;
+};
+struct Velocity {
+    float x, y;
+};
 
 struct Particle{};
 

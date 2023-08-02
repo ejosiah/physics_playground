@@ -3,15 +3,16 @@
 #include "component_2d.h"
 #include "model2d.h"
 #include "types.h"
+#include <tuple>
 
 struct InstanceData{
     glm::mat4 transform;
-    glm::vec4 color;
+    Color color;
 };
 
 class Application2D : public VulkanBaseApp {
 public:
-    Application2D(std::string title, Bounds2D bounds): VulkanBaseApp("Closing velocity") {}
+    Application2D(const std::string& title, Bounds2D bounds = std::make_tuple(glm::vec2(-1), glm::vec2(1)));
 
     ~Application2D() override = default;
 
@@ -58,7 +59,6 @@ protected:
 
     VkCommandBuffer *buildCommandBuffers(uint32_t imageIndex, uint32_t &numCommandBuffers) override;
 
-
 private:
     VulkanDescriptorPool m_descriptorPool;
     VulkanCommandPool m_commandPool;
@@ -80,6 +80,7 @@ private:
         VulkanBuffer line;
         VulkanBuffer box;
         VulkanBuffer vector;
+        int numCircleVertices{};
     } buffer;
 
     struct {
@@ -104,9 +105,11 @@ private:
     } instancesData;
 
     struct {
-        Camera m_camera;
+        glm::mat4 view{};
+        glm::mat4 projection{};
         VulkanBuffer buffer;
-    } cameraData;
+    } camera;
+    Bounds2D m_bounds;
 
     void initCamera();
 };
