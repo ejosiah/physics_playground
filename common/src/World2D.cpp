@@ -1,10 +1,12 @@
 #include "world2d.h"
-#include <GraphicsPipelineBuilder.hpp>
-#include "DescriptorSetBuilder.hpp"
-#include "xforms.h"
-#include <VulkanInitializers.h>
+#include "serializer.h"
 #include "profile.h"
-#include "ImGuiPlugin.hpp"
+#include <GraphicsPipelineBuilder.hpp>
+#include <DescriptorSetBuilder.hpp>
+#include <xforms.h>
+#include <VulkanInitializers.h>
+#include <ImGuiPlugin.hpp>
+#include <yaml-cpp/yaml.h>
 #include <memory>
 
 template<template<typename> typename Layout>
@@ -65,7 +67,7 @@ VkCommandBuffer *World2D<Layout>::buildCommandBuffers(uint32_t imageIndex, uint3
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render.pipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render.layout, 0, 1, &m_render.descriptorSet, 0, VK_NULL_HANDLE);
     vkCmdPushConstants(commandBuffer, m_render.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Camera), &m_camera);
-    vkCmdDraw(commandBuffer, vBuffer.vertices.sizeAs<RenderVertex>(), particles.active, 0, 0);
+    vkCmdDraw(commandBuffer, vBuffer.vertices.sizeAs<RenderVertex>(), particles.handle.active, 0, 0);
 
     renderOverlay(commandBuffer);
 
@@ -93,7 +95,7 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 
     ImGui::TextColored({0, 0, 0, 1}, "physics %d ms/frame", to<int>(avg));
     ImGui::TextColored({0, 0, 0, 1}, "%d frames/second", framePerSecond);
-    ImGui::TextColored({0, 0, 0, 1}, "%d particles", particles.active);
+    ImGui::TextColored({0, 0, 0, 1}, "%d particles", particles.handle.active);
     ImGui::TextColored({0, 0, 0, 1}, "%d min collisions", collisionStats.min);
     ImGui::TextColored({0, 0, 0, 1}, "%d average collisions", to<int>(cAvg));
     ImGui::TextColored({0, 0, 0, 1}, "%d max collisions", collisionStats.max);
@@ -107,6 +109,9 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     if(debugMode){
         ImGui::SameLine();
         nextFrame = ImGui::Button("nextFrame");
+    }
+    if(ImGui::Button("snapshot")){
+       snapshot();
     }
 
 //    ImGui::SetWindowSize({0, 0});
@@ -164,11 +169,25 @@ void World2D<Layout>::update(float time) {
     transferStateToGPU();
 
     static float newBalls = 0;
-//    newBalls += time;
-    if(newBalls > 5){
+    newBalls += time;
+    if(newBalls > 0.05){
         newBalls = 0;
-
-        fillParticles(50, particles.active);
+        static auto cRand = rng(0, 1, (1 << 11));
+        if(particles.handle.active < startParticles){
+            for(int i = particles.handle.active; i < particles.handle.active + 1; i++){
+                glm::vec2 position{m_radius, m_simDim.y - m_radius};
+                glm::vec2 velocity{ 27, 0 };
+                particles.handle.position()[i] = position;
+                particles.handle.previousPosition()[i] = position - velocity * 0.016667f;
+                particles.handle.velocity()[i] = velocity;
+                particles.handle.radius()[i] = m_radius;
+                particles.handle.inverseMass()[i] = 1.0;
+                particles.handle.restitution()[i] = m_restitution;
+                particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
+            }
+            particles.handle.active += 1;
+            solver->numParticles(particles.handle.active);
+        }
     }
 }
 template<template<typename> typename Layout>
@@ -340,23 +359,25 @@ void World2D<Layout>::createParticles() {
     }
     particles.cBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec4) * particles.max, "particle_color");
     particles.color = std::span{ reinterpret_cast<glm::vec4*>(particles.cBuffer.map()), particles.max };
-    fillParticles(startParticles);
-
+//    fillParticles(startParticles);
+//    loadParticles();
     solver = std::make_unique<BasicSolver<Layout>>(particles.handle, std::make_tuple(glm::vec2(0), m_simDim)
-                                                   , to<int>(particles.active), m_radius, m_numIterations);
+                                                   , to<int>(particles.handle.active), m_radius, m_numIterations);
+
+
 }
 
 template<template<typename> typename Layout>
 void World2D<Layout>::fillParticles(int N, int offset) {
-    particles.active = N + offset;
+    particles.handle.active = N + offset;
 
     // static auto seed = std::random_device{}();
     static auto seed = (1 << 20);
 
     auto rand = rng(0, m_simDim.x, seed);
-    auto vRand = rng(0, 10, seed + (1 << 10));
+    auto vRand = rng(0, 100, seed + (1 << 10));
     auto cRand = rng(0, 1, seed + (1 << 11));
-    for(int i = offset; i < particles.active; i++){
+    for(int i = offset; i < particles.handle.active; i++){
         glm::vec2 position{ rand(), rand()};
         glm::vec2 velocity{ vRand(), vRand() };
         particles.handle.position()[i] = position;
@@ -367,6 +388,38 @@ void World2D<Layout>::fillParticles(int N, int offset) {
         particles.handle.restitution()[i] = m_restitution;
         particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
     }
+    particles.color[0] = glm::vec4(0);
+}
+
+template<template<typename> typename Layout>
+void World2D<Layout>::loadParticles()  {
+    YAML::Node node = YAML::LoadFile("world.yaml");
+    YAML::Node nodeParticles = node["particles"];
+    YAML::Node nodeFields = nodeParticles["fields"];
+    spdlog::info("loaded capacity {}", nodeParticles["capacity"].as<int>());
+    spdlog::info("num fields {}", nodeFields.size());
+
+    static auto seed = (1 << 20);
+
+    auto rand = rng(0, m_simDim.x, seed);
+    auto vRand = rng(0, 10, seed + (1 << 10));
+    auto cRand = rng(0, 1, seed + (1 << 11));
+
+    particles.handle.active = nodeFields.size();
+    for(auto i = 0; i < nodeFields.size(); i++){
+        auto fields = nodeFields[i].as<Fields>();
+
+        glm::vec2 position = fields.position;
+        glm::vec2 velocity = fields.velocity;
+        particles.handle.position()[i] = position;
+        particles.handle.previousPosition()[i] = position - velocity * 0.016667f;
+        particles.handle.velocity()[i] = velocity;
+        particles.handle.radius()[i] = m_radius;
+        particles.handle.inverseMass()[i] = 1.0;
+        particles.handle.restitution()[i] = m_restitution;
+        particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
+    }
+
     particles.color[0] = glm::vec4(0);
 }
 
@@ -460,6 +513,58 @@ template<template<typename> typename Layout>
 Dimension World2D<Layout>::computeSimDimensions(float simWidth, Dimension screenDim) {
     auto ar = screenDim.x/screenDim.y;
     return Dimension{ simWidth } * ar;
+}
+
+template<template<typename> typename Layout>
+void World2D<Layout>::snapshot() {
+    YAML::Emitter emitter;
+    emitter << YAML::BeginMap;
+    emitter << YAML::Key << "bounds";
+    emitter << YAML::Value;
+    emitter << YAML::BeginMap;
+        emitter << YAML::Key << "min";
+        emitter << YAML::Value << YAML::BeginSeq << 0 << 0 << YAML::EndSeq;
+        emitter << YAML::Key << "max";
+        emitter << YAML::Value << YAML::BeginSeq << m_simDim.x << m_simDim.y << YAML::EndSeq;
+    emitter << YAML::EndMap;
+
+    emitter << YAML::Key << "particles";
+    emitter << YAML::Value;
+    emitter << particles.handle;
+//    emitter << YAML::BeginMap;
+//        emitter << YAML::Key << "capacity" << YAML::Value << particles.handle.size();
+//        emitter << YAML::Key << "fields" << YAML::Value;
+//        emitter << YAML::BeginSeq;
+//        for(int i = 0; i < particles.active; i++){
+//            emitter << YAML::BeginMap;
+//                emitter << YAML::Key << "position";
+//                emitter << YAML::Value;
+//                emitter <<  YAML::BeginSeq;
+//                    emitter << particles.handle.position()[i].x;
+//                    emitter << particles.handle.position()[i].y;
+//                emitter << YAML::EndSeq;
+//                emitter << YAML::Key << "velocity";
+//                emitter << YAML::Value;
+//                emitter <<  YAML::BeginSeq;
+//                    emitter << particles.handle.velocity()[i].x;
+//                    emitter << particles.handle.velocity()[i].y;
+//                emitter << YAML::EndSeq;
+//                emitter << YAML::Key << "inverseMass";
+//                emitter << YAML::Value << particles.handle.inverseMass()[i];
+//                emitter << YAML::Key << "restitution";
+//                emitter << YAML::Value << particles.handle.restitution()[i];
+//                emitter << YAML::Key << "radius";
+//                emitter << YAML::Value << particles.handle.radius()[i];
+//            emitter << YAML::EndMap;
+//        }
+//        emitter << YAML::EndSeq;
+//    emitter << YAML::EndMap;
+
+    emitter << YAML::EndMap;
+
+    std::ofstream fout{"world.yaml"};
+    if(fout.bad()) return;
+    fout << emitter.c_str();
 }
 
 template World2D<InterleavedMemoryLayout>;

@@ -1,21 +1,21 @@
 #pragma once
 
-#include "VulkanBaseApp.h"
-#include <glm/glm.hpp>
 #include "model2d.h"
 #include "solver2d.h"
-#include <span>
-#include <type_traits>
 #include "spacial_hash.h"
 #include "types.h"
 #include "particle.h"
 #include "world2d.h"
-#include <GraphicsPipelineBuilder.hpp>
-#include "DescriptorSetBuilder.hpp"
-#include "xforms.h"
-#include <VulkanInitializers.h>
 #include "profile.h"
-#include "ImGuiPlugin.hpp"
+#include <VulkanBaseApp.h>
+#include <GraphicsPipelineBuilder.hpp>
+#include <DescriptorSetBuilder.hpp>
+#include <xforms.h>
+#include <VulkanInitializers.h>
+#include <ImGuiPlugin.hpp>
+#include <glm/glm.hpp>
+#include <type_traits>
+#include <span>
 #include <memory>
 
 using uDimension = glm::uvec2;
@@ -44,6 +44,8 @@ protected:
 
     void fillParticles(int n, int = 0);
 
+    void loadParticles();
+
     void createDescriptorPool();
 
     void createDescriptorSetLayout();
@@ -68,6 +70,8 @@ private:
     static std::vector<RenderVertex> circle(const glm::vec4& color);
 
     void createPipeline();
+
+    void snapshot();
 
 protected:
     void onSwapChainRecreation() override;
@@ -96,10 +100,9 @@ private:
         std::vector<float> inverseMass;
         std::vector<float> radius;
         uint32_t max{100000};
-        uint32_t active{0};
     } particles;
 
-    int startParticles{4};
+    int startParticles{10000};
 
     struct {
         VulkanBuffer vertices;
@@ -116,10 +119,10 @@ private:
     std::array<double, 100> execTime{};
 
 
-    float m_restitution{0.8};
+    float m_restitution{0.5};
     bool m_gravityOn{true};
-    float m_radius{1};
+    float m_radius{0.5};
     int physicsFrame{1};
-    bool debugMode{true};
+    bool debugMode{false};
     bool nextFrame{false};
 };

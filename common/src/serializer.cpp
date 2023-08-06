@@ -9,27 +9,28 @@ namespace yaml {
 
     template<typename T>
     void capture(std::any any, YAML::Emitter& emitter) {
-        emitter << YAML::Value;
         if(any.type() == typeid(Snap::Sequence<T>)){
+            emitter << YAML::Value;
             const auto& seq = std::any_cast<Snap::Sequence<T>>(any);
             emitter << YAML::BeginSeq;
-            for(auto& value : seq) {
-                capture<T>(value, emitter);
+            for(const auto& value : seq) {
+                emitter << std::any_cast<T>(value);
             }
             emitter << YAML::EndSeq;
         }
         if(any.type() == typeid(T)){
-            emitter << std::any_cast<T>(any);
+            emitter << YAML::Value << std::any_cast<T>(any);
         }
     }
 
     YAML::Emitter& process(const Snap::Snapshot& snapshot, YAML::Emitter& emitter) {
         emitter << YAML::BeginMap;
         for(auto& [key, value] : snapshot) {
+            emitter << YAML::Key <<  key;
             if(value.type() == typeid(Snap::Snapshot)){
-                emitter << YAML::Key <<  key;
                 process(std::any_cast<Snap::Snapshot>(value), emitter);
             }else {
+                capture<bool>(value, emitter);
                 capture<int>(value, emitter);
                 capture<unsigned>(value, emitter);
                 capture<long>(value, emitter);
@@ -52,9 +53,13 @@ namespace yaml {
         return emitter;
     }
 
-    template<typename T>
-    auto serialize(const auto& object) -> std::string {
+//    auto serialize(const auto& object) -> std::string {
+//        YAML::Emitter emitter;
+//        return process(object.snapshot(), emitter).c_str();
+//    }
+
+    auto serialize(const Snap::Snapshot& snapshot) -> std::string {
         YAML::Emitter emitter;
-        return process(object.snapshot, emitter).c_str();
+        return process(snapshot, emitter).c_str();
     }
 }

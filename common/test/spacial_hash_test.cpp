@@ -4,7 +4,7 @@
 
 TEST_F(SpacialHashGrid2DFixture, gridConstruction) {
     constexpr auto maxNumObjects = 20u;
-    UnBoundedSpacialHashGrid2D grid{1, maxNumObjects};
+    UnBoundedSpacialHashGrid2D grid{1, {}, maxNumObjects};
 
     ASSERT_EQ(grid.numSpacing(), 1.f) << "spacing should be 1";
     ASSERT_EQ(grid.size(), 40) << "grid size should be twice of max objects";
@@ -17,7 +17,7 @@ TEST_F(SpacialHashGrid2DFixture, gridConstruction) {
 
 TEST_F(SpacialHashGrid2DFixture, gridInitialization) {
     constexpr auto maxNumObjects = 20u;
-    UnBoundedSpacialHashGrid2D grid{1, maxNumObjects};
+    UnBoundedSpacialHashGrid2D grid{1, {}, maxNumObjects};
 
     std::vector<glm::vec2> positions{};
     positions.emplace_back(1.5, 2.5);
@@ -60,7 +60,7 @@ TEST_F(SpacialHashGrid2DFixture, findEntriesInOneCell) {
     std::vector<glm::vec2> positions{{2.1, 2.2}, {2.3, 2.4}, {2.4, 2.8}};
 
     constexpr auto maxNumObjects = 20u;
-    UnBoundedSpacialHashGrid2D grid{1, maxNumObjects};
+    UnBoundedSpacialHashGrid2D grid{1, {}, maxNumObjects};
     grid.initialize(positions);
     grid.query({2, 2}, {1, 1});
 
@@ -76,7 +76,7 @@ TEST_F(SpacialHashGrid2DFixture, findEntriesInOneCellWithNagativePositions) {
     std::vector<glm::vec2> positions{{-2.1, -2.2}, {-2.3, -2.4}, {-2.4, -2.8}};
 
     constexpr auto maxNumObjects = 20u;
-    UnBoundedSpacialHashGrid2D grid{1, maxNumObjects};
+    UnBoundedSpacialHashGrid2D grid{1, {}, maxNumObjects};
     grid.initialize(positions);
     grid.query({-2, -2}, {1, 1});
 
@@ -97,7 +97,7 @@ TEST_F(SpacialHashGrid2DFixture, findEntries1CellApart) {
     };
 
     constexpr auto maxNumObjects = 20u;
-    UnBoundedSpacialHashGrid2D grid{1, maxNumObjects};
+    UnBoundedSpacialHashGrid2D grid{1, {}, maxNumObjects};
     grid.initialize(positions);
     grid.query({2, 2}, {1, 1});
 
@@ -125,6 +125,23 @@ TEST_F(SpacialHashGrid2DFixture, findEntries1CellApartInBoundedGrid) {
     ASSERT_TRUE(std::find(results.begin(), results.end(), 5) != results.end());
 }
 
-TEST_F(SpacialHashGrid2DFixture, findEntries1CellApartWithNegativePositionsInBoundedGrid) {
+TEST_F(SpacialHashGrid2DFixture, DISABLED_findEntries1CellApartWithNegativePositionsInBoundedGrid) {
     FAIL() << "Not yet implemented!";
+}
+
+TEST_F(SpacialHashGrid2DFixture, findEntriesFromLiveExample) {
+    std::vector<glm::vec2> positions {
+            {16.1669006, 4.61024904}, { 5.16748476, 2.78193212 },
+            {13.4405041, 1.63059223}, { 14.021657, 1.13235247},
+    };
+//    constexpr auto maxNumObjects = 100000u;
+    const auto resolution = 20.f;
+    const auto maxRadius = 2.0f;
+    constexpr auto maxNumObjects = 100000u;
+    UnBoundedSpacialHashGrid2D  grid{maxRadius, glm::vec2(resolution), maxNumObjects};
+    grid.initialize(positions);
+    auto results = grid.query(positions[2], glm::vec2(maxRadius));
+    ASSERT_EQ(results.size(), maxRadius);
+    ASSERT_TRUE(std::find(results.begin(), results.end(), 2) != results.end());
+    ASSERT_TRUE(std::find(results.begin(), results.end(), 3) != results.end());
 }

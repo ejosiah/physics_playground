@@ -1,14 +1,15 @@
 #pragma once
 
 #include "model2d.h"
-#include <glm/glm.hpp>
-#include <utility>
 #include "sdf2d.h"
 #include "particle.h"
+#include "spacial_hash.h"
+#include "snap.h"
+#include <glm/glm.hpp>
+#include <spdlog/spdlog.h>
 #include <memory>
 #include <span>
-#include "spacial_hash.h"
-#include <spdlog/spdlog.h>
+#include <utility>
 
 template<template<typename> typename Layout>
 inline void boundsCheck(Particle2D<Layout>& particle, const Bounds2D& bounds, int i) {
@@ -82,15 +83,15 @@ public:
     void resolveCollision(int ia, int ib);
 
     void numParticles(int value) {
-        assert(value <= 0);
+        assert(value >= 0);
         m_numParticles = value;
     }
 
 public:
     struct CollisionStats{
         std::array<int, 100> average{};
-        int max{std::numeric_limits<int>::min()};
-        int min{std::numeric_limits<int>::max()};
+        int max{0};
+        int min{0};
         int next{0};
     };
 

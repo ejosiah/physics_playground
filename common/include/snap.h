@@ -11,6 +11,5 @@ struct Snap {
 
     template<typename T>
     using Sequence = std::vector<T>;
-
     virtual  Snapshot snapshot() = 0;
 };

@@ -1,12 +1,14 @@
 #pragma once
 
+#include "snap.h"
 #include <map>
 #include <string>
 #include <any>
 
 namespace yaml {
 
-    template<typename T>
-    auto serialize(const auto& object) -> std::string;
+//    auto serialize(const auto& object) -> std::string;
+
+    auto serialize(const Snap::Snapshot& snapshot) -> std::string;
 
 }

@@ -12,7 +12,7 @@
 #include <type_traits>
 
 template<bool Unbounded = true>
-class SpacialHashGrid2D : public Snap {
+class SpacialHashGrid2D {
 public:
     SpacialHashGrid2D() = default;
 
@@ -152,22 +152,6 @@ public:
     [[nodiscard]]
     std::vector<int32_t> counts() const { return m_counts; }
 
-    std::map<std::string, std::any> snapshot() final {
-        std::map<std::string, std::any> result{};
-        result["spacing"] = m_spacing;
-        result["counts"] = m_counts;
-        result["cellEntries"] = m_cellEntries;
-
-        if constexpr (Unbounded){
-            result["unbounded"] = true;
-            result["tableSize"] = m_tableSize;
-        }else {
-            result["unbounded"] = false;
-            result["gridSize"] = m_gridSize;
-        }
-
-        return result;
-    }
 
 private:
     float m_spacing{};
