@@ -3,6 +3,7 @@
 #include "component_2d.h"
 #include "model2d.h"
 #include "types.h"
+#include <ImGuiPlugin.hpp>
 #include <tuple>
 
 struct InstanceData{
@@ -10,15 +11,19 @@ struct InstanceData{
     Color color;
 };
 
+using Gravity = glm::vec2;
+
 class Application2D : public VulkanBaseApp {
 public:
     Application2D(const std::string& title, Bounds2D bounds = std::make_tuple(glm::vec2(-1), glm::vec2(1)));
+
+    static Settings settings2d();
 
     ~Application2D() override = default;
 
     virtual void createScene() = 0;
 
-    virtual void uiOverlay(VkCommandBuffer commandBuffer) {}
+    virtual void uiOverlay() {}
 
     void renderScene(VkCommandBuffer commandBuffer);
 
@@ -29,15 +34,27 @@ public:
 protected:
     void initApp() override;
 
+    void initCamera();
+
     void createInstanceData();
 
     void createCircleInstanceData(float maxLayer);
+
+    void createBoxInstanceData(float maxLayer);
+
+    void createLineInstanceData(float maxLayer);
+
+    glm::mat4 lineTransform(glm::vec2 position, float layer, float maxLayer, float mag, float angle);
+
+    void createVectorInstanceData(float maxLayer);
 
     void uploadPrimitives();
 
     void createCirclePrimitive();
 
     void createLinePrimitive();
+
+    void createVectorPrimitive();
 
     void createBoxPrimitive();
 
@@ -47,9 +64,9 @@ protected:
 
     void updateDescriptorSet();
 
-    VkDescriptorSet updateInstanceDescriptor( VulkanBuffer& buffer
-                                              , std::vector<VkWriteDescriptorSet>& writes
-                                             , std::vector<VkDescriptorBufferInfo>& bufferInfo);
+    VkDescriptorSet updateInstanceDescriptor( std::vector<VkWriteDescriptorSet>& writes
+                                              , VkDescriptorBufferInfo& sbufferInfo
+                                              , VkDescriptorBufferInfo& cBufferInfo);
 
     void createCommandPool();
 
@@ -59,7 +76,9 @@ protected:
 
     VkCommandBuffer *buildCommandBuffers(uint32_t imageIndex, uint32_t &numCommandBuffers) override;
 
-private:
+    void boundsCheck(Position& position, Velocity& velocity, float radius = 0);
+
+protected:
     VulkanDescriptorPool m_descriptorPool;
     VulkanCommandPool m_commandPool;
     std::vector<VkCommandBuffer> m_commandBuffers;
@@ -81,24 +100,29 @@ private:
         VulkanBuffer box;
         VulkanBuffer vector;
         int numCircleVertices{};
+        int numVectorPoints{};
     } buffer;
 
     struct {
         struct {
             VulkanBuffer buffer;
             VkDescriptorSet descriptorSet;
+            InstanceData* data;
         } circle;
         struct {
             VulkanBuffer buffer;
             VkDescriptorSet descriptorSet;
+            InstanceData* data;
         } line;
         struct {
             VulkanBuffer buffer;
             VkDescriptorSet descriptorSet;
+            InstanceData* data;
         } box;
         struct {
             VulkanBuffer buffer;
             VkDescriptorSet descriptorSet;
+            InstanceData* data;
         } vector;
         VulkanDescriptorSetLayout setLayout;
 
@@ -111,5 +135,6 @@ private:
     } camera;
     Bounds2D m_bounds;
 
-    void initCamera();
+    int m_maxLayer{1};
+    Gravity m_gravity{0, -0.098};
 };

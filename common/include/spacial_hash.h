@@ -1,17 +1,18 @@
 #pragma once
 
+#include "snap.h"
+#include "particle.h"
+#include <glm/glm.hpp>
+#include <fmt/format.h>
+#include <boost/functional/hash.hpp>
 #include <vector>
 #include <algorithm>
 #include <numeric>
-#include <glm/glm.hpp>
 #include <span>
-#include <fmt/format.h>
-#include "particle.h"
-#include <boost/functional/hash.hpp>
 #include <type_traits>
 
 template<bool Unbounded = true>
-class SpacialHashGrid2D {
+class SpacialHashGrid2D : public Snap {
 public:
     SpacialHashGrid2D() = default;
 
@@ -150,6 +151,23 @@ public:
 
     [[nodiscard]]
     std::vector<int32_t> counts() const { return m_counts; }
+
+    std::map<std::string, std::any> snapshot() final {
+        std::map<std::string, std::any> result{};
+        result["spacing"] = m_spacing;
+        result["counts"] = m_counts;
+        result["cellEntries"] = m_cellEntries;
+
+        if constexpr (Unbounded){
+            result["unbounded"] = true;
+            result["tableSize"] = m_tableSize;
+        }else {
+            result["unbounded"] = false;
+            result["gridSize"] = m_gridSize;
+        }
+
+        return result;
+    }
 
 private:
     float m_spacing{};

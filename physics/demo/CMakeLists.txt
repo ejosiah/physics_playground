@@ -1,2 +1,2 @@
-add_executable(physics main.cpp)
-target_link_libraries(physics common)
+add_executable(demo main.cpp)
+target_link_libraries(demo common)

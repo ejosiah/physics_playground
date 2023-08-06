@@ -100,7 +100,15 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 
     ImGui::End();
 
-//    ImGui::Begin("controls");
+
+
+    ImGui::Begin("controls");
+    ImGui::Checkbox("debug", &debugMode);
+    if(debugMode){
+        ImGui::SameLine();
+        nextFrame = ImGui::Button("nextFrame");
+    }
+
 //    ImGui::SetWindowSize({0, 0});
 //
 //    if(ImGui::Button("Restart")){
@@ -123,7 +131,7 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 //        dirty = false;
 //        fillParticles(nParticles, particles.active);
 //    }
-//    ImGui::End();
+    ImGui::End();
 
     plugin<ImGuiPlugin>(IM_GUI_PLUGIN).draw(commandBuffer);
 
@@ -136,8 +144,15 @@ void World2D<Layout>::update(float time) {
     static int nextPhysicsRun = 0;
     pTime += time;
     nextPhysicsRun++;
-    const auto dt = time;
-    if(nextPhysicsRun%physicsFrame == 0) {
+    auto dt = time;
+    if(debugMode){
+        if(!nextFrame){
+            dt = 0;
+        }else{
+            nextFrame = false;
+        }
+    }
+    if(nextPhysicsRun%physicsFrame == 0 && dt != 0) {
         static int count = 0;
         auto duration = profile<chrono::milliseconds>([&] {
               solver->run(dt);
@@ -338,7 +353,7 @@ void World2D<Layout>::fillParticles(int N, int offset) {
     // static auto seed = std::random_device{}();
     static auto seed = (1 << 20);
 
-    auto rand = rng(0, 20, seed);
+    auto rand = rng(0, m_simDim.x, seed);
     auto vRand = rng(0, 10, seed + (1 << 10));
     auto cRand = rng(0, 1, seed + (1 << 11));
     for(int i = offset; i < particles.active; i++){

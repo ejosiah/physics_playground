@@ -4,10 +4,21 @@
 #include <numeric>
 
 Application2D::Application2D(const std::string& title, Bounds2D bounds)
-: VulkanBaseApp(title, {})
+: VulkanBaseApp(title, settings2d())
 , m_bounds(std::move(bounds))
 {
-    width = height = 1024;
+    std::unique_ptr<Plugin> plugin = std::make_unique<ImGuiPlugin>();
+    addPlugin(plugin);
+}
+
+Settings Application2D::settings2d() {
+    Settings s{};
+    s.width = s.width = s.height = 1024;
+    s.depthTest = true;
+    s.enabledFeatures.wideLines = true;
+    s.msaaSamples = VK_SAMPLE_COUNT_16_BIT;
+
+    return s;
 }
 
 void Application2D::initApp() {
@@ -25,6 +36,7 @@ void Application2D::initApp() {
 void Application2D::uploadPrimitives() {
     createCirclePrimitive();
     createLinePrimitive();
+    createVectorPrimitive();
     createBoxPrimitive();
     createInstanceData();
 }
@@ -52,6 +64,16 @@ void Application2D::createLinePrimitive() {
 
 }
 
+void Application2D::createVectorPrimitive() {
+    std::vector<glm::vec3> points{
+            {0, 0, 0}, {1, 0, 0},
+            {1, 0, 0}, {0.9, 0.05, 0},
+            {1, 0, 0}, {0.9, -0.05, 0}
+    };
+    buffer.vector = device.createDeviceLocalBuffer(points.data(), BYTE_SIZE(points), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    buffer.numVectorPoints = points.size();
+}
+
 void Application2D::createBoxPrimitive() {
     std::vector<glm::vec3> box{
             {-.5, -.5, 0}, {.5, -.5, 0},
@@ -62,32 +84,112 @@ void Application2D::createBoxPrimitive() {
 }
 
 void Application2D::createInstanceData() {
-    uint32_t maxLayer = 1;
+    int maxLayer = 1;
     m_registry.view<const Layer>().each([&maxLayer](const auto& layer){
         maxLayer = std::max(maxLayer, layer.value);
     });
 
     createCircleInstanceData(to<float>(maxLayer));
+    createBoxInstanceData(to<float>(maxLayer));
+    createLineInstanceData(to<float>(maxLayer));
+    createVectorInstanceData(to<float>(maxLayer));
+    m_maxLayer = maxLayer;
 }
 
 
 void Application2D::createCircleInstanceData(float maxLayer) {
     std::vector<InstanceData> instances;
-    auto cView = m_registry.view<Circle, Position, Color, Layer>();
+    auto view = m_registry.view<Circle, Position, Color, Layer>();
 
-    for(auto [entity, circle, position, color, layerComp] : cView.each()){
-        m_registry.emplace<Instance>(entity, to<uint32_t>(instances.size()));
+    for(auto [entity, circle, position, color, layer] : view.each()){
+        m_registry.emplace<Instance>(entity, to<int>(instances.size()));
 
-        float z = remap(to<float>(layerComp.value), maxLayer, 0, -0.9f, 0.9f);
+        float z = remap(to<float>(layer.value), 0, maxLayer, -0.9f, 0.9f);
         glm::mat4 xform = glm::translate(glm::mat4(1), glm::vec3(position.x, position.y, z));
         xform = glm::scale(xform, glm::vec3(circle.radius));
 
         instances.push_back({ xform, color});
     }
 
+    instancesData.circle.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+            , VMA_MEMORY_USAGE_CPU_TO_GPU
+            , 2000 * sizeof(InstanceData), "circle_instances");
+
     if(!instances.empty()) {
-        instancesData.circle.buffer = device.createCpuVisibleBuffer(instances.data(), BYTE_SIZE(instances),
-                                                                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        instancesData.circle.buffer.copy(instances);
+    }
+
+    instancesData.circle.data = reinterpret_cast<InstanceData*>(instancesData.circle.buffer.map());
+}
+
+void Application2D::createBoxInstanceData(float maxLayer) {
+    std::vector<InstanceData> instances;
+    auto view = m_registry.view<Box, Position, Color, Layer>();
+
+    for(auto [entity, box, position, color, layer] : view.each()){
+        m_registry.emplace<Instance>(entity, to<int>(instances.size()));
+
+        float z = remap(to<float>(layer.value), 0, maxLayer, -0.9f, 0.9f);
+        glm::mat4 xform = glm::translate(glm::mat4(1), glm::vec3(position.x, position.y, z));
+        xform = glm::scale(xform, glm::vec3(box.width, box.height, 1));
+
+        instances.push_back({ xform, color});
+    }
+
+    instancesData.box.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+            , VMA_MEMORY_USAGE_CPU_TO_GPU
+            , 2000 * sizeof(InstanceData), "box_instances");
+
+    if(!instances.empty()) {
+        instancesData.box.buffer.copy(instances);
+    }
+}
+void Application2D::createLineInstanceData(float maxLayer) {
+    std::vector<InstanceData> instances;
+    auto view = m_registry.view<Line, Position, Color, Layer>();
+
+    for(auto [entity, line, position, color, layer] : view.each()){
+        m_registry.emplace<Instance>(entity, to<int>(instances.size()));
+
+        glm::mat4 xform = lineTransform(position.value, to<float>(layer.value), maxLayer, line.length, line.angle);
+        instances.push_back({ xform, color});
+    }
+    instancesData.line.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+                                                    , VMA_MEMORY_USAGE_CPU_TO_GPU
+                                                    , 2000 * sizeof(InstanceData), "line_instances");
+
+    if(!instances.empty()) {
+        instancesData.line.buffer.copy(instances);
+    }
+
+    instancesData.line.data = reinterpret_cast<InstanceData*>(instancesData.line.buffer.map());
+
+}
+
+void Application2D::createVectorInstanceData(float maxLayer) {
+    using namespace vec_ops;
+    instancesData.vector.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+            , VMA_MEMORY_USAGE_CPU_TO_GPU
+            , 2000 * sizeof(InstanceData), "vector_instances");
+    instancesData.vector.data = reinterpret_cast<InstanceData*>(instancesData.vector.buffer.map());
+
+
+    std::vector<InstanceData> instances;
+    auto view = m_registry.view<Vector, Position, Color, Layer>();
+
+    for(auto [entity, vector, position, color, layer] : view.each()){
+        m_registry.emplace<Instance>(entity, to<int>(instances.size()));
+
+        float z = remap(to<float>(layer.value), 0, maxLayer, -0.9f, 0.9f);
+        glm::mat4 xform = glm::translate(glm::mat4(1), glm::vec3(position.x, position.y, z));
+        xform = glm::scale(xform, glm::vec3(magnitude(vector)));
+        xform = glm::rotate(xform, angle(vector), {0, 0, 1});
+        instances.push_back({ xform, color});
+    }
+
+
+    if(!instances.empty()) {
+        instancesData.vector.buffer.copy(instances);
     }
 }
 
@@ -148,36 +250,24 @@ void Application2D::createDescriptorSetLayout() {
 
 void Application2D::updateDescriptorSet() {
     std::vector<VkWriteDescriptorSet> writes{};
-    std::vector<VkDescriptorBufferInfo> bufferInfo{};
-//    instancesData.circle.descriptorSet = updateInstanceDescriptor(instancesData.circle.buffer, writes, bufferInfo);
-//    instancesData.line.descriptorSet = updateInstanceDescriptor(instancesData.line.buffer, writes, bufferInfo);
-//    instancesData.box.descriptorSet = updateInstanceDescriptor(instancesData.box.buffer, writes, bufferInfo);
-//    instancesData.vector.descriptorSet = updateInstanceDescriptor(instancesData.vector.buffer, writes, bufferInfo);
-
-    auto descriptorSet = m_descriptorPool.allocate({  instancesData.setLayout }).front();
-    auto write = initializers::writeDescriptorSet(descriptorSet);
-
-    write.dstBinding = 0;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    write.descriptorCount = 1;
-    VkDescriptorBufferInfo cInfo{instancesData.circle.buffer, 0, VK_WHOLE_SIZE};
-    write.pBufferInfo = &cInfo;
-    writes.push_back(write);
-
-    write.dstBinding = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    VkDescriptorBufferInfo camInfo{camera.buffer, 0, VK_WHOLE_SIZE};
-    write.pBufferInfo =  &camInfo;
-    writes.push_back(write);
-
-    instancesData.circle.descriptorSet = descriptorSet;
+    std::vector<VkDescriptorBufferInfo> infos{
+            {camera.buffer, 0, VK_WHOLE_SIZE},
+            {instancesData.circle.buffer, 0, VK_WHOLE_SIZE},
+            {instancesData.box.buffer, 0, VK_WHOLE_SIZE},
+            {instancesData.line.buffer, 0, VK_WHOLE_SIZE},
+            {instancesData.vector.buffer, 0, VK_WHOLE_SIZE},
+    };
+    instancesData.circle.descriptorSet = updateInstanceDescriptor(writes, infos[1], infos[0]);
+    instancesData.box.descriptorSet = updateInstanceDescriptor(writes, infos[2], infos[0]);
+    instancesData.line.descriptorSet = updateInstanceDescriptor(writes, infos[3], infos[0]);
+    instancesData.vector.descriptorSet = updateInstanceDescriptor(writes, infos[4], infos[0]);
 
     device.updateDescriptorSets(writes);
 }
 
-VkDescriptorSet Application2D::updateInstanceDescriptor(VulkanBuffer& buffer
-                                                        , std::vector<VkWriteDescriptorSet> &writes
-                                                        , std::vector<VkDescriptorBufferInfo>& bufferInfo) {
+VkDescriptorSet Application2D::updateInstanceDescriptor( std::vector<VkWriteDescriptorSet> &writes
+                                                        , VkDescriptorBufferInfo& sbufferInfo
+                                                        , VkDescriptorBufferInfo& cBufferInfo){
 
     auto descriptorSet = m_descriptorPool.allocate({  instancesData.setLayout }).front();
     auto write = initializers::writeDescriptorSet(descriptorSet);
@@ -185,22 +275,23 @@ VkDescriptorSet Application2D::updateInstanceDescriptor(VulkanBuffer& buffer
     write.dstBinding = 0;
     write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     write.descriptorCount = 1;
-    bufferInfo.push_back(VkDescriptorBufferInfo{buffer, 0, VK_WHOLE_SIZE});
-    write.pBufferInfo = &bufferInfo[bufferInfo.size() - 1];
+    write.pBufferInfo = &sbufferInfo;
     writes.push_back(write);
 
     write.dstBinding = 1;
     write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    bufferInfo.push_back(VkDescriptorBufferInfo{camera.buffer, 0, VK_WHOLE_SIZE});
-    write.pBufferInfo =  &bufferInfo[bufferInfo.size() - 1];
+    write.pBufferInfo = &cBufferInfo;
     writes.push_back(write);
+
 
     return descriptorSet;
 }
 
 void Application2D::createPipeline() {
+    auto builder = device.graphicsPipelineBuilder();
     solidRender.pipeline =
-        device.graphicsPipelineBuilder()
+        builder
+            .allowDerivatives()
             .shaderStage()
                 .vertexShader("application2d.vert.spv")
                 .fragmentShader("application2d.frag.spv")
@@ -223,6 +314,7 @@ void Application2D::createPipeline() {
                 .cullBackFace()
                 .frontFaceCounterClockwise()
                 .polygonModeFill()
+                .lineWidth(2.0)
             .multisampleState()
                 .rasterizationSamples(settings.msaaSamples)
             .depthStencilState()
@@ -241,6 +333,14 @@ void Application2D::createPipeline() {
             .subpass(0)
             .name("render_solid")
         .build(solidRender.layout);
+
+    lineRender.pipeline =
+        builder
+            .basePipeline(solidRender.pipeline)
+            .inputAssemblyState()
+                .lines()
+            .name("render_line")
+        .build(lineRender.layout);
 }
 
 VkCommandBuffer* Application2D::buildCommandBuffers(uint32_t imageIndex, uint32_t &numCommandBuffers) {
@@ -265,7 +365,8 @@ VkCommandBuffer* Application2D::buildCommandBuffers(uint32_t imageIndex, uint32_
     vkCmdBeginRenderPass(commandBuffer, &rPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     renderScene(commandBuffer);
-    uiOverlay(commandBuffer);
+    uiOverlay();
+    plugin(IM_GUI_PLUGIN).draw(commandBuffer);
 
     vkCmdEndRenderPass(commandBuffer);
     vkEndCommandBuffer(commandBuffer);
@@ -284,16 +385,72 @@ void Application2D::renderScene(VkCommandBuffer commandBuffer) {
     auto instanceCount = m_registry.size<Circle>();
 
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, solidRender.pipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, solidRender.layout, 0, 1, &instancesData.circle.descriptorSet, 0, VK_NULL_HANDLE);
     if(instanceCount > 0) {
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, solidRender.layout, 0, 1, &instancesData.circle.descriptorSet, 0, VK_NULL_HANDLE);
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, buffer.circle, &offset);
         vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
     }
 
+    vertexCount = 4;
     instanceCount = m_registry.size<Box>();
     if(instanceCount > 0) {
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, instancesData.box.buffer, &offset);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, solidRender.layout, 0, 1, &instancesData.box.descriptorSet, 0, VK_NULL_HANDLE);
+
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, buffer.box, &offset);
         vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
     }
 
+    vertexCount = 2;
+    instanceCount = m_registry.size<Line>();
+    if(instanceCount > 0) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lineRender.pipeline);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lineRender.layout, 0, 1, &instancesData.line.descriptorSet, 0, VK_NULL_HANDLE);
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, buffer.line, &offset);
+        vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
+    }
+
+    vertexCount = buffer.numVectorPoints;
+    instanceCount = m_registry.size<Vector>();
+    if(instanceCount > 0) {
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lineRender.pipeline);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lineRender.layout, 0, 1, &instancesData.vector.descriptorSet, 0, VK_NULL_HANDLE);
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, buffer.vector, &offset);
+        vkCmdDraw(commandBuffer, vertexCount, instanceCount, 0, 0);
+    }
+
+}
+
+void Application2D::boundsCheck(Position &position, Velocity& velocity, float radius) {
+    auto [min, max] = m_bounds;
+
+
+    min += radius;
+    max -= radius;
+    auto& p = position.value;
+    auto& v = velocity.value;
+    if(p.x < min.x){
+        p.x = min.x;
+        v.x *= -1;
+    }
+    if(p.x > max.x){
+        p.x = max.x;
+        v.x *= -1;
+    }
+    if(p.y < min.y){
+        p.y = min.y;
+        v.y *= -1;
+    }
+    if(p.y > max.y){
+        p.y = max.y;
+        v.y *= -1;
+    }
+}
+
+glm::mat4 Application2D::lineTransform(glm::vec2 position, float layer, float maxLayer, float mag, float angle) {
+    float z = remap(layer, 0, maxLayer, -0.9f, 0.9f);
+    glm::mat4 xform = glm::translate(glm::mat4(1), glm::vec3(position.x, position.y, z));
+    xform = glm::scale(xform, glm::vec3(mag));
+    xform = glm::rotate(xform, angle, {0, 0, 1});
+
+    return xform;
 }

@@ -99,7 +99,7 @@ private:
         uint32_t active{0};
     } particles;
 
-    int startParticles{50};
+    int startParticles{4};
 
     struct {
         VulkanBuffer vertices;
@@ -118,6 +118,8 @@ private:
 
     float m_restitution{0.8};
     bool m_gravityOn{true};
-    float m_radius{0.5};
+    float m_radius{1};
     int physicsFrame{1};
+    bool debugMode{true};
+    bool nextFrame{false};
 };
