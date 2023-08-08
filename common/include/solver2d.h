@@ -87,6 +87,10 @@ public:
         m_numParticles = value;
     }
 
+    inline void gravity(glm::vec2 value) {
+        this->m_gravity = value;
+    }
+
 public:
     struct CollisionStats{
         std::array<int, 100> average{};
@@ -109,6 +113,7 @@ protected:
     int m_iterations{1};
     int m_numParticles{0};
     float m_maxRadius{};
+    glm::vec2 m_gravity{0, -9.8};
     SpacialHashGrid2D<> grid;
 };
 
@@ -261,7 +266,7 @@ BasicSolver<Layout>::BasicSolver(Particle2D<Layout> particles, Bounds2D worldBou
 template<template<typename> typename Layout>
 void BasicSolver<Layout>::integrate(float dt) {
     const auto N = this->m_numParticles;
-    const glm::vec2 G = glm::vec2{0, -9.8};
+    const glm::vec2 G = this->m_gravity;
 #pragma loop(hint_parallel(8))
     for(int i = 0; i < N; i++){
         this->m_position[i] += this->m_velocity[i] * dt;
@@ -279,7 +284,7 @@ VarletIntegrationSolver<Layout>::VarletIntegrationSolver(Particle2D<Layout> part
 template<template<typename> typename Layout>
 void VarletIntegrationSolver<Layout>::integrate(float dt) {
     const auto N = this->m_numParticles;
-    const glm::vec2 G = glm::vec2{0, -9.8};
+    const glm::vec2 G = this->m_gravity;
 
     for(int i = 0; i < N; i++){
         auto p0 = this->m_prevPosition[i];
