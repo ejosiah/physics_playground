@@ -98,9 +98,14 @@ void Application2D::createInstanceData() {
 
 
 void Application2D::createCircleInstanceData(float maxLayer) {
-    std::vector<InstanceData> instances;
-    auto view = m_registry.view<Circle, Position, Color, Layer>();
+    VkDeviceSize size = std::max(VkDeviceSize{1}, m_registry.size<Circle>());
 
+    instancesData.circle.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+            , VMA_MEMORY_USAGE_CPU_TO_GPU
+            , size * sizeof(InstanceData), "circle_instances");
+
+    auto view = m_registry.view<Circle, Position, Color, Layer>();
+    std::vector<InstanceData> instances;
     for(auto [entity, circle, position, color, layer] : view.each()){
         m_registry.emplace<Instance>(entity, to<int>(instances.size()));
 
@@ -111,10 +116,6 @@ void Application2D::createCircleInstanceData(float maxLayer) {
         instances.push_back({ xform, color});
     }
 
-    instancesData.circle.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-            , VMA_MEMORY_USAGE_CPU_TO_GPU
-            , BYTE_SIZE(instances), "circle_instances");
-
     if(!instances.empty()) {
         instancesData.circle.buffer.copy(instances);
     }
@@ -123,6 +124,11 @@ void Application2D::createCircleInstanceData(float maxLayer) {
 }
 
 void Application2D::createBoxInstanceData(float maxLayer) {
+    VkDeviceSize size = std::max(VkDeviceSize{1}, m_registry.size<Box>());
+    instancesData.box.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+            , VMA_MEMORY_USAGE_CPU_TO_GPU
+            , 2000 * sizeof(InstanceData), "box_instances");
+
     std::vector<InstanceData> instances;
     auto view = m_registry.view<Box, Position, Color, Layer>();
 
@@ -136,15 +142,17 @@ void Application2D::createBoxInstanceData(float maxLayer) {
         instances.push_back({ xform, color});
     }
 
-    instancesData.box.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-            , VMA_MEMORY_USAGE_CPU_TO_GPU
-            , 2000 * sizeof(InstanceData), "box_instances");
-
     if(!instances.empty()) {
         instancesData.box.buffer.copy(instances);
     }
 }
 void Application2D::createLineInstanceData(float maxLayer) {
+    VkDeviceSize size = std::max(VkDeviceSize{1}, m_registry.size<Line>());
+    instancesData.line.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+            , VMA_MEMORY_USAGE_CPU_TO_GPU
+            , 2000 * sizeof(InstanceData), "line_instances");
+
+
     std::vector<InstanceData> instances;
     auto view = m_registry.view<Line, Position, Color, Layer>();
 
@@ -154,9 +162,6 @@ void Application2D::createLineInstanceData(float maxLayer) {
         glm::mat4 xform = lineTransform(position.value, to<float>(layer.value), maxLayer, line.length, line.angle);
         instances.push_back({ xform, color});
     }
-    instancesData.line.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-                                                    , VMA_MEMORY_USAGE_CPU_TO_GPU
-                                                    , 2000 * sizeof(InstanceData), "line_instances");
 
     if(!instances.empty()) {
         instancesData.line.buffer.copy(instances);
