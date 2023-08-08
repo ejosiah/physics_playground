@@ -1,8 +1,5 @@
 #pragma once
 
-#include <vector>
-#include <glm/glm.hpp>
-#include <tuple>
+#include "model.h"
 
-using Bounds2D = std::tuple<glm::vec2, glm::vec2>;
-
+using Bounds2D = Bounds<2>;
