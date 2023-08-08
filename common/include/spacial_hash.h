@@ -41,17 +41,17 @@ public:
     [[nodiscard]]
     int32_t hashPosition(glm::vec2 position) const {
         auto pid = intCoords(position);
-        if constexpr (Unbounded) {
-            return hash(pid);
-        }else {
-            return pid.x * m_gridSize.y + pid.y;
-        }
+       return hash(pid);
     }
 
     [[nodiscard]]
     int32_t hash(glm::ivec2 pid) const {
-        const auto h = (pid.x * 92837111) ^ (pid.y * 689287499);	// fantasy function
-        return glm::abs(h) % static_cast<int32_t>(m_tableSize);
+        if constexpr (Unbounded) {
+            const auto h = (pid.x * 92837111) ^ (pid.y * 689287499);
+            return glm::abs(h) % static_cast<int32_t>(m_tableSize);
+        } else {
+            return pid.x * m_gridSize.y + pid.y;
+        }
     }
 
     void initialize(std::span<glm::vec2> positions) {
@@ -118,7 +118,7 @@ public:
 
         for(auto xi = d0.x; xi <= d1.x; ++xi){
             for(auto yi = d0.y; yi <= d1.y; ++yi){
-                const auto h = hashPosition({xi, yi});
+                const auto h = hash({xi, yi});
                 const auto start = m_counts[h];
                 const auto end = m_counts[h + 1];
 
