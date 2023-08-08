@@ -31,7 +31,7 @@ class World2D : public VulkanBaseApp {
 public:
     World2D() = default;
 
-    World2D(const std::string& title, Dimension simDim, uDimension screenDim);
+    World2D(const std::string& title, Bounds2D bounds, uDimension screenDim);
 
 protected:
     void initApp() final;
@@ -77,7 +77,7 @@ protected:
     void onSwapChainRecreation() override;
 
 private:
-    Dimension m_simDim;
+    Bounds2D m_bounds;
     VulkanDescriptorPool m_descriptorPool;
     VulkanCommandPool m_commandPool;
     std::vector<VkCommandBuffer> m_commandBuffers;
@@ -102,7 +102,7 @@ private:
         uint32_t max{100000};
     } particles;
 
-    int startParticles{10000};
+    int startParticles{50};
 
     struct {
         VulkanBuffer vertices;
@@ -121,7 +121,7 @@ private:
 
     float m_restitution{0.5};
     bool m_gravityOn{true};
-    float m_radius{0.5};
+    float m_radius{1};
     int physicsFrame{1};
     bool debugMode{false};
     bool nextFrame{false};

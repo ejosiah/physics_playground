@@ -5,6 +5,6 @@
 
 
 int main(int, char**){
-    World2D<SeparateFieldMemoryLayout> world{"physics world", {150, 150}, {1024, 1024}};
+    World2D<SeparateFieldMemoryLayout> world{"physics world", {glm::vec2(0), glm::vec2(20)}, {1024, 1024}};
     world.run();
 }
