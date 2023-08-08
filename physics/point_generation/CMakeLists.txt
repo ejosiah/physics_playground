@@ -1,0 +1,2 @@
+add_executable(point_generation main.cpp)
+target_link_libraries(point_generation common)
