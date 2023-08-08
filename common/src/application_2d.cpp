@@ -24,6 +24,7 @@ Settings Application2D::settings2d() {
 void Application2D::initApp() {
     createScene();
     uploadPrimitives();
+    createInstanceData();
     initCamera();
     createDescriptorPool();
     createCommandPool();
@@ -38,7 +39,6 @@ void Application2D::uploadPrimitives() {
     createLinePrimitive();
     createVectorPrimitive();
     createBoxPrimitive();
-    createInstanceData();
 }
 
 void Application2D::createCirclePrimitive() {
@@ -113,7 +113,7 @@ void Application2D::createCircleInstanceData(float maxLayer) {
 
     instancesData.circle.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
             , VMA_MEMORY_USAGE_CPU_TO_GPU
-            , 2000 * sizeof(InstanceData), "circle_instances");
+            , BYTE_SIZE(instances), "circle_instances");
 
     if(!instances.empty()) {
         instancesData.circle.buffer.copy(instances);
@@ -168,9 +168,10 @@ void Application2D::createLineInstanceData(float maxLayer) {
 
 void Application2D::createVectorInstanceData(float maxLayer) {
     using namespace vec_ops;
+    auto size = std::max(size_t{1},  m_registry.size<Vector>());
     instancesData.vector.buffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
             , VMA_MEMORY_USAGE_CPU_TO_GPU
-            , 2000 * sizeof(InstanceData), "vector_instances");
+            , size * sizeof(InstanceData), "vector_instances");
     instancesData.vector.data = reinterpret_cast<InstanceData*>(instancesData.vector.buffer.map());
 
 
@@ -453,4 +454,26 @@ glm::mat4 Application2D::lineTransform(glm::vec2 position, float layer, float ma
     xform = glm::rotate(xform, angle, {0, 0, 1});
 
     return xform;
+}
+
+void Application2D::reload() {
+    m_reloadRequested = true;
+
+}
+
+void Application2D::newFrame() {
+    if(m_reloadRequested){
+        doReload();
+        m_reloadRequested = false;
+    }
+}
+
+void Application2D::doReload() {
+    std::vector<entt::entity> entities{};
+    m_registry.each([&entities](const auto entity){ entities.push_back(entity); });
+    m_registry.destroy(entities.begin(), entities.end());
+    createScene();
+    createInstanceData();
+    updateDescriptorSet();
+    invalidateSwapChain();
 }

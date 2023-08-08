@@ -15,7 +15,7 @@ using Gravity = glm::vec2;
 
 class Application2D : public VulkanBaseApp {
 public:
-    Application2D(const std::string& title, Bounds2D bounds = std::make_tuple(glm::vec2(-1), glm::vec2(1)));
+    Application2D(const std::string& title, Bounds2D bounds = {-1, 1});
 
     static Settings settings2d();
 
@@ -78,6 +78,10 @@ protected:
 
     void boundsCheck(Position& position, Velocity& velocity, float radius = 0);
 
+    void newFrame() override;
+
+    void reload();
+
 protected:
     VulkanDescriptorPool m_descriptorPool;
     VulkanCommandPool m_commandPool;
@@ -137,4 +141,9 @@ protected:
 
     int m_maxLayer{1};
     Gravity m_gravity{0, -0.098};
+    bool m_reloadRequested{false};
+
+private:
+    void doReload();
+
 };
