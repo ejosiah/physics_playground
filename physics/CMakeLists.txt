@@ -1,2 +1,3 @@
 add_subdirectory(demo)
 add_subdirectory(closing_velocity)
+add_subdirectory(point_generation)
