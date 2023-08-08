@@ -17,7 +17,7 @@
 #include <type_traits>
 #include <span>
 #include <memory>
-
+#include "particle_emitter.h"
 using uDimension = glm::uvec2;
 using Dimension = glm::vec2;
 
@@ -25,6 +25,45 @@ struct RenderVertex{
     glm::vec2 position;
     glm::vec4 color;
 };
+
+template<template<typename> typename Layout>
+class RandomParticleEmitter : public ParticleEmitter<Layout>{
+public:
+    RandomParticleEmitter() = default;
+
+    RandomParticleEmitter(std::shared_ptr<Particle2D<Layout>> particles);
+
+    ~RandomParticleEmitter() override = default;
+
+    void onUpdate(float currentTime, float deltaTime) override;
+
+    RandomParticleEmitter& radius(float value) {
+        m_radius = value;
+        return *this;
+    }
+
+    RandomParticleEmitter& bounds(Bounds2D bounds) {
+        m_bounds = bounds;
+        return *this;
+    }
+
+    RandomParticleEmitter& numParticles(int numParticles) {
+        m_numParticles = numParticles;
+        return *this;
+    }
+
+    RandomParticleEmitter& restitution(int value) {
+        m_restitution = value;
+        return *this;
+    }
+
+private:
+    float m_radius{};
+    Bounds2D m_bounds{};
+    int m_numParticles{};
+    float m_restitution{};
+};
+
 
 template<template<typename> typename Layout>
 class World2D : public VulkanBaseApp {
@@ -42,7 +81,7 @@ protected:
 
     void createParticles();
 
-    void fillParticles(int n, int = 0);
+    void colorParticles();
 
     void loadParticles();
 
@@ -86,7 +125,7 @@ private:
 
 
     struct {
-        Particle2D<Layout> handle;
+        std::shared_ptr<Particle2D<Layout>> handle;
         std::span<glm::vec4> color{};
         VulkanBuffer cBuffer;
         VulkanBuffer buffer;
@@ -121,8 +160,10 @@ private:
 
     float m_restitution{0.5};
     bool m_gravityOn{true};
-    float m_radius{1};
+    float m_radius{0.5};
     int physicsFrame{1};
     bool debugMode{false};
     bool nextFrame{false};
+    RandomParticleEmitter<Layout> emitter;
+
 };

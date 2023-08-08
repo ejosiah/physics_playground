@@ -42,27 +42,13 @@ inline void boundsCheck(Particle2D<Layout>& particle, const Bounds2D& bounds, in
 
 constexpr float Gravity{-9.8};
 
-struct Contact {
-    int a{-1};
-    int b{-1};
-    float depth{0};
-};
-
-template<template<typename> typename Layout>
-class ContactGenerator{
-public:
-
-    virtual std::span<Contact> generateContact(Particle2D<Layout>& m_particles) = 0;
-};
-
 template<template<typename> typename Layout>
 class Solver2D {
 public:
     Solver2D() = default;
 
-    Solver2D(Particle2D<Layout> particles
+    Solver2D(std::shared_ptr<Particle2D<Layout>> particles
              , Bounds2D worldBounds
-            , int numParticles
             , float maxRadius
             , int m_iterations = 1);
 
@@ -82,11 +68,6 @@ public:
 
     void resolveCollision(int ia, int ib);
 
-    void numParticles(int value) {
-        assert(value >= 0);
-        m_numParticles = value;
-    }
-
     inline void gravity(glm::vec2 value) {
         this->m_gravity = value;
     }
@@ -103,7 +84,7 @@ public:
 
 protected:
     Bounds2D m_worldBounds;
-    Particle2D<Layout> m_particles;
+    std::shared_ptr<Particle2D<Layout>> m_particles;
     Particle2D<Layout>::Position m_position;
     Particle2D<Layout>::PreviousPosition m_prevPosition;
     Particle2D<Layout>::Velocity m_velocity;
@@ -111,7 +92,6 @@ protected:
     Particle2D<Layout>::Restitution m_restitution;
     Particle2D<Layout>::Radius m_radius;
     int m_iterations{1};
-    int m_numParticles{0};
     float m_maxRadius{};
     glm::vec2 m_gravity{0, -9.8};
     SpacialHashGrid2D<> grid;
@@ -125,9 +105,8 @@ public:
 
     ~BasicSolver() final = default;
 
-    BasicSolver(Particle2D<Layout> particles
+    BasicSolver(std::shared_ptr<Particle2D<Layout>>
             , Bounds2D worldBounds
-            , int numParticles
             , float maxRadius
             , int iterations = 1);
 
@@ -141,11 +120,10 @@ public:
 
     ~VarletIntegrationSolver() final = default;
 
-    VarletIntegrationSolver(Particle2D<Layout> particles
-    , Bounds2D worldBounds
-    , int numParticles
-    , float maxRadius
-    , int iterations = 1);
+    VarletIntegrationSolver(std::shared_ptr<Particle2D<Layout>>
+            , Bounds2D worldBounds
+            , float maxRadius
+            , int iterations = 1);
 
 
     void postSolve(float dt) final;
@@ -159,24 +137,22 @@ using InterleavedMemoryLayoutBasicSolver = BasicSolver<InterleavedMemoryLayout>;
 
 
 template<template<typename> typename Layout>
-Solver2D<Layout>::Solver2D(Particle2D<Layout> particles
+Solver2D<Layout>::Solver2D(std::shared_ptr<Particle2D<Layout>>  particles
                            , Bounds2D worldBounds
-                           , int numParticles
                            , float maxRadius
                            , int iterations)
 : m_particles{ particles }
-, m_position{ particles.position() }
-, m_prevPosition{ particles.previousPosition() }
-, m_velocity{ particles.velocity() }
-, m_inverseMass{ particles.inverseMass() }
-, m_restitution{ particles.restitution() }
-, m_radius{ particles.radius() }
+, m_position{ particles->position() }
+, m_prevPosition{ particles->previousPosition() }
+, m_velocity{ particles->velocity() }
+, m_inverseMass{ particles->inverseMass() }
+, m_restitution{ particles->restitution() }
+, m_radius{ particles->radius() }
 , m_worldBounds{ worldBounds }
 , m_maxRadius{ maxRadius }
-, m_numParticles{ numParticles }
 , m_iterations{ iterations }
 {
-    grid = SpacialHashGrid2D{m_maxRadius * 2, to<int32_t>(particles.size()) };
+    grid = SpacialHashGrid2D{m_maxRadius * 2, to<int32_t>(particles->size()) };
 }
 
 template<template<typename> typename Layout>
@@ -199,10 +175,11 @@ void Solver2D<Layout>::solve(float dt) {
 
 template<template<typename> typename Layout>
 void Solver2D<Layout>::resolveCollision() {
-    grid.initialize(m_particles, m_numParticles);
+    const auto numParticles = m_particles->active;
+    grid.initialize(*m_particles, numParticles);
 
     auto& vPositions = m_position;
-    for(int i = 0; i < m_numParticles; i++){
+    for(int i = 0; i < numParticles; i++){
         auto& position = vPositions[i];
         auto ids = grid.query(position, glm::vec2(m_maxRadius * 2));
 
@@ -212,7 +189,7 @@ void Solver2D<Layout>::resolveCollision() {
             collisions++;
             resolveCollision(i, j);
         }
-        boundsCheck(m_particles, m_worldBounds, i);
+        boundsCheck(*m_particles, m_worldBounds, i);
 
         collisionStats.average[collisionStats.next++] = collisions;
         collisionStats.max = glm::max(collisionStats.max, collisions);
@@ -259,13 +236,13 @@ void Solver2D<Layout>::resolveCollision(int ia, int ib) {
 }
 
 template<template<typename> typename Layout>
-BasicSolver<Layout>::BasicSolver(Particle2D<Layout> particles, Bounds2D worldBounds, int numParticles, float maxRadius, int iterations)
-: Solver2D<Layout>(particles, worldBounds, numParticles, maxRadius, iterations)
+BasicSolver<Layout>::BasicSolver(std::shared_ptr<Particle2D<Layout>> particles, Bounds2D worldBounds, float maxRadius, int iterations)
+: Solver2D<Layout>(particles, worldBounds, maxRadius, iterations)
 {}
 
 template<template<typename> typename Layout>
 void BasicSolver<Layout>::integrate(float dt) {
-    const auto N = this->m_numParticles;
+    const auto N = this->m_particles->active;
     const glm::vec2 G = this->m_gravity;
 #pragma loop(hint_parallel(8))
     for(int i = 0; i < N; i++){
@@ -275,9 +252,11 @@ void BasicSolver<Layout>::integrate(float dt) {
 }
 
 template<template<typename> typename Layout>
-VarletIntegrationSolver<Layout>::VarletIntegrationSolver(Particle2D<Layout> particles, Bounds2D worldBounds,
-                                                         int numParticles, float maxRadius, int iterations)
-:Solver2D<Layout>(particles, worldBounds, numParticles, maxRadius, iterations)
+VarletIntegrationSolver<Layout>::VarletIntegrationSolver(std::shared_ptr<Particle2D<Layout>> particles
+                                                         , Bounds2D worldBounds
+                                                         , float maxRadius
+                                                         , int iterations)
+:Solver2D<Layout>(particles, worldBounds, maxRadius, iterations)
 {}
 
 
