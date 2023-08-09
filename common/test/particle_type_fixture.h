@@ -1,8 +1,8 @@
 #pragma once
 
+#include "particle.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "particle.h"
 
 class ParticleTypeFixture : public ::testing::Test {
 protected:

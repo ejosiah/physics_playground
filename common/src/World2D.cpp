@@ -10,14 +10,14 @@
 #include <memory>
 
 template<template<typename> typename Layout>
-World2D<Layout>::World2D(const std::string &title, Bounds2D bounds, uDimension screenDim)
+World2D<Layout>::World2D(const std::string &title, Bounds2D bounds, uDimension screenDim, std::unique_ptr<ParticleEmitter<Layout>> emitter)
         : VulkanBaseApp(title, create(screenDim))
         , m_bounds(bounds)
+        , emitter(std::move(emitter))
 {
     std::unique_ptr<Plugin> plugin = std::make_unique<ImGuiPlugin>();
     addPlugin(plugin);
     auto size = glm::length(glm::distance(bounds.lower, bounds.upper));
-
 }
 
 template<template<typename> typename Layout>
@@ -69,7 +69,7 @@ VkCommandBuffer *World2D<Layout>::buildCommandBuffers(uint32_t imageIndex, uint3
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render.pipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render.layout, 0, 1, &m_render.descriptorSet, 0, VK_NULL_HANDLE);
     vkCmdPushConstants(commandBuffer, m_render.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Camera), &m_camera);
-    vkCmdDraw(commandBuffer, vBuffer.vertices.sizeAs<RenderVertex>(), particles.handle->active, 0, 0);
+    vkCmdDraw(commandBuffer, vBuffer.vertices.sizeAs<RenderVertex>(), particles.handle->size(), 0, 0);
 
     renderOverlay(commandBuffer);
 
@@ -97,7 +97,7 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 
     ImGui::TextColored({0, 0, 0, 1}, "physics %d ms/frame", to<int>(avg));
     ImGui::TextColored({0, 0, 0, 1}, "%d frames/second", framePerSecond);
-    ImGui::TextColored({0, 0, 0, 1}, "%d particles", particles.handle->active);
+    ImGui::TextColored({0, 0, 0, 1}, "%d particles", particles.handle->size());
     ImGui::TextColored({0, 0, 0, 1}, "%d min collisions", collisionStats.min);
     ImGui::TextColored({0, 0, 0, 1}, "%d average collisions", to<int>(cAvg));
     ImGui::TextColored({0, 0, 0, 1}, "%d max collisions", collisionStats.max);
@@ -161,7 +161,7 @@ void World2D<Layout>::update(float time) {
     }
     if(nextPhysicsRun%physicsFrame == 0 && dt != 0) {
         static int count = 0;
-        emitter.update(dt);
+        emitter->update(dt);
         auto duration = profile<chrono::milliseconds>([&] {
               solver->run(dt);
         });
@@ -362,13 +362,7 @@ void World2D<Layout>::createParticles() {
     }
     particles.cBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec4) * particles.max, "particle_color");
     particles.color = std::span{ reinterpret_cast<glm::vec4*>(particles.cBuffer.map()), particles.max };
-
-    emitter =
-        RandomParticleEmitter<Layout>{particles.handle}
-                .radius(m_radius)
-                .bounds(m_bounds)
-                .numParticles(startParticles)
-                .restitution(m_restitution);
+    emitter->set(particles.handle);
     colorParticles();
 //    loadParticles();
     solver = std::make_unique<BasicSolver<Layout>>(particles.handle, m_bounds, m_radius, m_numIterations);
@@ -389,34 +383,34 @@ void World2D<Layout>::colorParticles() {
 
 template<template<typename> typename Layout>
 void World2D<Layout>::loadParticles()  {
-    YAML::Node node = YAML::LoadFile("world.yaml");
-    YAML::Node nodeParticles = node["particles"];
-    YAML::Node nodeFields = nodeParticles["fields"];
-    spdlog::info("loaded capacity {}", nodeParticles["capacity"].as<int>());
-    spdlog::info("num fields {}", nodeFields.size());
-
-    static auto seed = (1 << 20);
-
-    auto rand = random(m_bounds, seed);
-    auto vRand = rng(0, 10, seed + (1 << 10));
-    auto cRand = rng(0, 1, seed + (1 << 11));
-
-    particles.handle->active = nodeFields.size();
-    for(auto i = 0; i < nodeFields.size(); i++){
-        auto fields = nodeFields[i].as<Fields>();
-
-        glm::vec2 position = fields.position;
-        glm::vec2 velocity = fields.velocity;
-        particles.handle->position()[i] = position;
-        particles.handle->previousPosition()[i] = position - velocity * 0.016667f;
-        particles.handle->velocity()[i] = velocity;
-        particles.handle->radius()[i] = m_radius;
-        particles.handle->inverseMass()[i] = 1.0;
-        particles.handle->restitution()[i] = m_restitution;
-        particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
-    }
-
-    particles.color[0] = glm::vec4(0);
+//    YAML::Node node = YAML::LoadFile("world.yaml");
+//    YAML::Node nodeParticles = node["particles"];
+//    YAML::Node nodeFields = nodeParticles["fields"];
+//    spdlog::info("loaded capacity {}", nodeParticles["capacity"].as<int>());
+//    spdlog::info("num fields {}", nodeFields.size());
+//
+//    static auto seed = (1 << 20);
+//
+//    auto rand = random(m_bounds, seed);
+//    auto vRand = rng(0, 10, seed + (1 << 10));
+//    auto cRand = rng(0, 1, seed + (1 << 11));
+//
+//    particles.handle->active = nodeFields.size();
+//    for(auto i = 0; i < nodeFields.size(); i++){
+//        auto fields = nodeFields[i].as<Fields>();
+//
+//        glm::vec2 position = fields.position;
+//        glm::vec2 velocity = fields.velocity;
+//        particles.handle->position()[i] = position;
+//        particles.handle->previousPosition()[i] = position - velocity * 0.016667f;
+//        particles.handle->velocity()[i] = velocity;
+//        particles.handle->radius()[i] = m_radius;
+//        particles.handle->inverseMass()[i] = 1.0;
+//        particles.handle->restitution()[i] = m_restitution;
+//        particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
+//    }
+//
+//    particles.color[0] = glm::vec4(0);
 }
 
 template<template<typename> typename Layout>
@@ -534,38 +528,6 @@ void World2D<Layout>::snapshot() {
     if(fout.bad()) return;
     fout << emitter.c_str();
 }
-
-
-template<template<typename> typename Layout>
-RandomParticleEmitter<Layout>::RandomParticleEmitter(std::shared_ptr<Particle2D<Layout>> particles)
-        :ParticleEmitter<Layout>(particles) {
-
-}
-
-template<template<typename> typename Layout>
-void RandomParticleEmitter<Layout>::RandomParticleEmitter::onUpdate(float currentTime, float deltaTime) {
-    if(this->enabled()){
-        this->disable();
-        this->m_particles->active = m_numParticles;
-
-        static auto seed = (1 << 20);
-
-        auto pRand = random(m_bounds, seed);
-        auto vRand = rng(0, 10, seed + (1 << 10));
-        auto cRand = rng(0, 1, seed + (1 << 11));
-        for(int i = 0; i < this->m_particles->active; i++){
-            glm::vec2 position = pRand();
-            glm::vec2 velocity{ vRand(), vRand() };
-            this->m_particles->position()[i] = position;
-            this->m_particles->previousPosition()[i] = position - velocity * 0.016667f;
-            this->m_particles->velocity()[i] = velocity;
-            this->m_particles->radius()[i] = m_radius;
-            this->m_particles->inverseMass()[i] = 1.0;
-            this->m_particles->restitution()[i] = this->m_restitution;
-        }
-    }
-}
-
 
 template World2D<InterleavedMemoryLayout>;
 template World2D<SeparateFieldMemoryLayout>;

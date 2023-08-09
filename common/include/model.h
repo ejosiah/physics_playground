@@ -4,6 +4,8 @@
 #include <random>
 #include <array>
 #include <tuple>
+#include <spdlog/spdlog.h>
+#include <glm_format.h>
 
 template<glm::length_t L>
 struct Bounds {
@@ -15,7 +17,7 @@ struct Bounds {
 
     Bounds(vecType lc, vecType uc)
     : lower{lc}
-    , upper{lc}
+    , upper{uc}
     {}
 
     Bounds(float lc, float uc)

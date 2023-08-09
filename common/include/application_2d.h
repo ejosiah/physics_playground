@@ -15,7 +15,7 @@ using Gravity = glm::vec2;
 
 class Application2D : public VulkanBaseApp {
 public:
-    Application2D(const std::string& title, Bounds2D bounds = {-1, 1});
+    Application2D(const std::string& title, Bounds2D bounds = {glm::vec2(-1), glm::vec2(1)});
 
     static Settings settings2d();
 

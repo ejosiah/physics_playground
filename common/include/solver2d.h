@@ -152,7 +152,7 @@ Solver2D<Layout>::Solver2D(std::shared_ptr<Particle2D<Layout>>  particles
 , m_maxRadius{ maxRadius }
 , m_iterations{ iterations }
 {
-    grid = SpacialHashGrid2D{m_maxRadius * 2, to<int32_t>(particles->size()) };
+    grid = SpacialHashGrid2D{m_maxRadius * 2, to<int32_t>(particles->capacity()) };
 }
 
 template<template<typename> typename Layout>
@@ -175,7 +175,7 @@ void Solver2D<Layout>::solve(float dt) {
 
 template<template<typename> typename Layout>
 void Solver2D<Layout>::resolveCollision() {
-    const auto numParticles = m_particles->active;
+    const auto numParticles = m_particles->size();
     grid.initialize(*m_particles, numParticles);
 
     auto& vPositions = m_position;
@@ -242,7 +242,7 @@ BasicSolver<Layout>::BasicSolver(std::shared_ptr<Particle2D<Layout>> particles, 
 
 template<template<typename> typename Layout>
 void BasicSolver<Layout>::integrate(float dt) {
-    const auto N = this->m_particles->active;
+    const auto N = this->m_particles->size();
     const glm::vec2 G = this->m_gravity;
 #pragma loop(hint_parallel(8))
     for(int i = 0; i < N; i++){

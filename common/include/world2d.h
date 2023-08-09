@@ -26,51 +26,13 @@ struct RenderVertex{
     glm::vec4 color;
 };
 
-template<template<typename> typename Layout>
-class RandomParticleEmitter : public ParticleEmitter<Layout>{
-public:
-    RandomParticleEmitter() = default;
-
-    RandomParticleEmitter(std::shared_ptr<Particle2D<Layout>> particles);
-
-    ~RandomParticleEmitter() override = default;
-
-    void onUpdate(float currentTime, float deltaTime) override;
-
-    RandomParticleEmitter& radius(float value) {
-        m_radius = value;
-        return *this;
-    }
-
-    RandomParticleEmitter& bounds(Bounds2D bounds) {
-        m_bounds = bounds;
-        return *this;
-    }
-
-    RandomParticleEmitter& numParticles(int numParticles) {
-        m_numParticles = numParticles;
-        return *this;
-    }
-
-    RandomParticleEmitter& restitution(int value) {
-        m_restitution = value;
-        return *this;
-    }
-
-private:
-    float m_radius{};
-    Bounds2D m_bounds{};
-    int m_numParticles{};
-    float m_restitution{};
-};
-
 
 template<template<typename> typename Layout>
 class World2D : public VulkanBaseApp {
 public:
     World2D() = default;
 
-    World2D(const std::string& title, Bounds2D bounds, uDimension screenDim);
+    World2D(const std::string& title, Bounds2D bounds, uDimension screenDim, std::unique_ptr<ParticleEmitter<Layout>> emitter);
 
 protected:
     void initApp() final;
@@ -164,6 +126,6 @@ private:
     int physicsFrame{1};
     bool debugMode{false};
     bool nextFrame{false};
-    RandomParticleEmitter<Layout> emitter;
+    std::unique_ptr<ParticleEmitter<Layout>> emitter;
 
 };

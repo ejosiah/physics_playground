@@ -8,8 +8,6 @@ class ParticleEmitter {
 public:
     ParticleEmitter() = default;
 
-    ParticleEmitter(std::shared_ptr<Particle2D<Layout>> particles);
-
     virtual ~ParticleEmitter() = default;
 
     void update(float deltaTime);
@@ -29,17 +27,15 @@ public:
         m_enabled = false;
     }
 
+    void set(std::shared_ptr<Particle2D<Layout>> particles) {
+        m_particles = particles;
+    }
+
 protected:
     std::shared_ptr<Particle2D<Layout>> m_particles;
     bool m_enabled{true};
     float m_currentTime{0};
 };
-
-template<template<typename> typename Layout>
-ParticleEmitter<Layout>::ParticleEmitter(std::shared_ptr<Particle2D<Layout>> particles)
-: m_particles{ particles }{
-
-}
 
 template<template<typename> typename Layout>
 void ParticleEmitter<Layout>::update(float deltaTime) {

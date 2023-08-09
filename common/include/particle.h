@@ -3,12 +3,14 @@
 #include "types.h"
 #include <glm/glm.hpp>
 #include <yaml-cpp/yaml.h>
+#include <memory>
 #include <tuple>
 #include <iterator>
 #include <span>
 #include <vector>
 #include <stdexcept>
 #include <cstddef>
+#include <memory>
 
 enum class Field : int { Position = 0, PreviousPosition, Velocity, Mass, Restitution, Radius };
 
@@ -16,11 +18,11 @@ using OffsetStride = std::tuple<int, int>;
 
 template<typename T>
 struct Iterator : public std::iterator<
-                           std::random_access_iterator_tag,
-                           T,
-                           long,
-                           T*,
-                           T>
+        std::random_access_iterator_tag,
+        T,
+        long,
+        T*,
+        T>
 {
     T* ptr{};
     int stride{1};
@@ -61,34 +63,52 @@ struct Particles {
 
     Layout layout;
 
-    uint32_t active{};
-
     auto position() const {
-        return layout.position();
+        return layout.position(_internal.seekHead);
     }
 
     auto previousPosition() const  {
-        return layout.previousPosition();
+        return layout.previousPosition(_internal.seekHead);
     }
 
     auto velocity() const  {
-        return layout.velocity();
+        return layout.velocity(_internal.seekHead);
     }
 
     auto inverseMass() const  {
-        return layout.inverseMass();
+        return layout.inverseMass(_internal.seekHead);
     }
 
     auto restitution() const  {
-        return layout.restitution();
+        return layout.restitution(_internal.seekHead);
     }
+
     auto radius() const {
-        return layout.radius();
+        return layout.radius(_internal.seekHead);
     }
 
     auto size() const {
-        return layout.size();
+        return _internal.seekHead;
     }
+
+    auto empty() const {
+        return _internal.m_seekHead <= 0;
+    }
+
+    auto capacity() const {
+        return layout.capacity();
+    };
+
+    void add(VecType pos, VecType vel, float invMass, float radius, float restitution) {
+        layout.add(pos, pos + pos * vel * 0.016f, vel, invMass, radius, restitution, _internal.seekHead);
+        _internal.seekHead++;
+    }
+
+    struct {
+        friend class Particles;
+    private:
+        size_t seekHead{};
+    } _internal{};
 };
 
 template<typename VecType>
@@ -99,9 +119,10 @@ struct InterleavedMemoryLayout {
     class View{
     public:
 
-        View(InterleavedMemoryLayout layout)
+        View(InterleavedMemoryLayout layout, size_t size = std::numeric_limits<size_t>::max())
                 : m_layout{layout}
                 , m_offset(layout.get<field>())
+                , m_size{ size }
         {}
 
         ValueType& operator[](int id) {
@@ -116,7 +137,8 @@ struct InterleavedMemoryLayout {
 
     private:
         InterleavedMemoryLayout m_layout{};
-        int m_offset{0};
+        int m_offset{};
+        size_t m_size{};
     };
 
     struct MembersType {
@@ -135,7 +157,7 @@ struct InterleavedMemoryLayout {
     static constexpr auto Width = sizeof(Members) ;
 
     Members* data{};
-    size_t _size{};
+    size_t _capacity{};
 
     template<Field field>
     [[nodiscard]]
@@ -151,33 +173,43 @@ struct InterleavedMemoryLayout {
         throw std::runtime_error{ "invalid field" };
     }
 
-    auto position() const {
-        return View<VecType, Field::Position>{ *this };
+    auto position(size_t size) const {
+        return View<VecType, Field::Position>{ *this, size };
     }
 
-    auto previousPosition() const {
-        return View<VecType, Field::PreviousPosition>{ *this };
+    auto previousPosition(size_t size) const {
+        return View<VecType, Field::PreviousPosition>{ *this, size };
 
     }
 
-    auto velocity() const {
-        return View<VecType, Field::Velocity>{ *this };
+    auto velocity(size_t size) const {
+        return View<VecType, Field::Velocity>{ *this, size };
     }
 
-    auto inverseMass() const {
-        return View<float, Field::Mass>{ *this };
+    auto inverseMass(size_t size) const {
+        return View<float, Field::Mass>{ *this, size };
     }
 
-    auto restitution() const {
-        return View<float, Field::Restitution>{ *this };
+    auto restitution(size_t size) const {
+        return View<float, Field::Restitution>{ *this, size };
     }
 
-    auto radius() const {
-        return View<float, Field::Radius>{ *this };
+    auto radius(size_t size) const {
+        return View<float, Field::Radius>{ *this, size };
     }
 
-    [[nodiscard]] size_t size() const {
-        return _size;
+    void add(VecType pos, VecType prevPos, VecType vel, float invMass, float radius, float restitution, int index) {
+        assert(index >= 0 && index < _capacity);
+        data[index].position = pos;
+        data[index].prePosition = prevPos;
+        data[index].velocity = vel;
+        data[index].inverseMass = invMass;
+        data[index].radius = radius;
+        data[index].restitution = restitution;
+    }
+
+    [[nodiscard]] size_t capacity() const {
+        return _capacity;
     }
 };
 
@@ -201,20 +233,20 @@ struct SeparateFieldMemoryLayout {
     SeparateFieldMemoryLayout() = default;
 
     SeparateFieldMemoryLayout(std::span<Vec> position
-                              , std::span<Vec> prePosition
-                              , std::span<Vec> velocity
-                              , std::span<float> inverseMass
-                              , std::span<float> restitution
-                              , std::span<float> radius
+            , std::span<Vec> prePosition
+            , std::span<Vec> velocity
+            , std::span<float> inverseMass
+            , std::span<float> restitution
+            , std::span<float> radius
     )
     {
         data = Members { position, prePosition, velocity, inverseMass, restitution, radius};
     }
 
-    SeparateFieldMemoryLayout(size_t size)
+    SeparateFieldMemoryLayout(size_t capacity)
     {
         int offset = 0;
-        memory.resize(size * Width);
+        memory.resize(capacity * Width);
         allocate(memory);
     }
 
@@ -224,24 +256,24 @@ struct SeparateFieldMemoryLayout {
     }
 
     void allocate(std::span<char> memory){
-        const auto size = memory.size()/Width;
+        const auto capacity = memory.size() / Width;
         auto ptr = memory.data();
-        data.position = { as<Vec>(ptr), size };
-        ptr += size * sizeof(Vec);
+        data.position = {as<Vec>(ptr), capacity };
+        ptr += capacity * sizeof(Vec);
 
-        data.prePosition = { as<Vec>(ptr), size };
-        ptr += size * sizeof(Vec);
+        data.prePosition = {as<Vec>(ptr), capacity };
+        ptr += capacity * sizeof(Vec);
 
-        data.velocity = { as<Vec>(ptr), size};
-        ptr += size * sizeof(Vec);
+        data.velocity = {as<Vec>(ptr), capacity};
+        ptr += capacity * sizeof(Vec);
 
-        data.inverseMass = { as<float>(ptr), size};
-        ptr += size * sizeof(float);
+        data.inverseMass = {as<float>(ptr), capacity};
+        ptr += capacity * sizeof(float);
 
-        data.restitution = { as<float>(ptr), size};
-        ptr += size * sizeof(float);
+        data.restitution = {as<float>(ptr), capacity};
+        ptr += capacity * sizeof(float);
 
-        data.radius = { as<float>(ptr), size};
+        data.radius = {as<float>(ptr), capacity};
     }
 
     static constexpr size_t allocationSize(size_t size) { return Width * size; }
@@ -251,9 +283,10 @@ struct SeparateFieldMemoryLayout {
     class View{
     public:
 
-        View(SeparateFieldMemoryLayout layout)
+        View(SeparateFieldMemoryLayout layout, size_t size = std::numeric_limits<size_t>::max())
                 : m_layout{layout}
                 , m_ptr(layout.get<ValueType, field>())
+                , m_size{ size }
         {}
 
         ValueType& operator[](int id) {
@@ -267,6 +300,7 @@ struct SeparateFieldMemoryLayout {
     private:
         SeparateFieldMemoryLayout m_layout{};
         ValueType* m_ptr{0};
+        size_t m_size{};
 
     };
 
@@ -286,33 +320,43 @@ struct SeparateFieldMemoryLayout {
         throw std::runtime_error{ "invalid field" };
     }
 
-    auto position() const {
-        return View<VecType, Field::Position>{ *this };
+    auto position(size_t size) const {
+        return View<VecType, Field::Position>{ *this, size };
     }
 
-    auto previousPosition() const {
-        return View<VecType, Field::PreviousPosition>{ *this };
+    auto previousPosition(size_t size) const {
+        return View<VecType, Field::PreviousPosition>{ *this, size };
 
     }
 
-    auto velocity() const {
-        return View<VecType, Field::Velocity>{ *this };
+    auto velocity(size_t size) const {
+        return View<VecType, Field::Velocity>{ *this, size };
     }
 
-    auto inverseMass() const {
-        return View<float, Field::Mass>{ *this };
+    auto inverseMass(size_t size) const {
+        return View<float, Field::Mass>{ *this, size };
     }
 
-    auto restitution() const {
-        return View<float, Field::Restitution>{ *this };
+    auto restitution(size_t size) const {
+        return View<float, Field::Restitution>{ *this, size };
     }
 
-    auto radius() const {
-        return View<float, Field::Radius>{ *this };
+    auto radius(size_t size) const {
+        return View<float, Field::Radius>{ *this, size };
+    }
+
+    void add(VecType pos, VecType prevPos, VecType vel, float invMass, float radius, float restitution, int index) {
+        assert(index >= 0 && index < data.position.size());
+        data.position[index] = pos;
+        data.prePosition[index] = prevPos;
+        data.velocity[index] = vel;
+        data.inverseMass[index] = invMass;
+        data.radius[index] = radius;
+        data.restitution[index] = restitution;
     }
 
     [[nodiscard]]
-    size_t size() const {
+    size_t capacity() const {
         return data.position.size();
     }
 
@@ -346,13 +390,26 @@ inline InterleavedMemoryParticle2D createInterleavedMemoryParticle2D(std::span<t
     return { { span.data(), span.size() } };
 }
 
+inline std::shared_ptr<InterleavedMemoryParticle2D> createInterleavedMemoryParticle2DPtr(std::span<typename InterleavedMemoryParticle2D::Layout::Members> span) {
+    return std::make_shared<InterleavedMemoryParticle2D>( InterleavedMemoryParticle2D{ span.data(), span.size() } );
+}
+
 inline SeparateFieldParticle2D createSeparateFieldParticle2D(std::span<glm::vec2> positions
-                                                             , std::span<glm::vec2> prevPosition
-                                                             , std::span<glm::vec2> velocity
-                                                             , std::span<float> inverseMass
-                                                             , std::span<float> restitution
-                                                             , std::span<float> radius) {
+        , std::span<glm::vec2> prevPosition
+        , std::span<glm::vec2> velocity
+        , std::span<float> inverseMass
+        , std::span<float> restitution
+        , std::span<float> radius) {
     return { { positions, prevPosition, velocity, inverseMass, restitution, radius }};
+}
+
+inline std::shared_ptr<SeparateFieldParticle2D> createSeparateFieldParticle2DPtr(std::span<glm::vec2> positions
+        , std::span<glm::vec2> prevPosition
+        , std::span<glm::vec2> velocity
+        , std::span<float> inverseMass
+        , std::span<float> restitution
+        , std::span<float> radius) {
+    return std::make_shared<SeparateFieldParticle2D>( SeparateFieldParticle2D{ {positions, prevPosition, velocity, inverseMass, restitution, radius} });
 }
 
 inline SeparateFieldParticle2D createSeparateFieldParticle2D(size_t numParticles){
@@ -368,7 +425,7 @@ inline YAML::Emitter& operator<<(YAML::Emitter& emitter, const Particle2D<Layout
     emitter << YAML::Key << "capacity" << YAML::Value << particles.size();
     emitter << YAML::Key << "fields" << YAML::Value;
     emitter << YAML::BeginSeq;
-    for(int i = 0; i < particles.active; i++){
+    for(int i = 0; i < particles.size(); i++){
         emitter << YAML::BeginMap;
         emitter << YAML::Key << "position";
         emitter << YAML::Value;
