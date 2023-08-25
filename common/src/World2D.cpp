@@ -375,7 +375,7 @@ void World2D<Layout>::colorParticles() {
 
     auto cRand = rng(0, 1, (1 << 11));
 
-    std::generate(particles.color.data(), particles.color.data() + startParticles, [&](){
+    std::generate(particles.color.begin(), particles.color.end(), [&](){
         return  glm::vec4(cRand(), cRand(), cRand(), 1 );
     });
     particles.color[0] = glm::vec4(0);

@@ -31,7 +31,13 @@ public:
         m_particles = particles;
     }
 
+
 protected:
+    auto target() {
+        return m_particles;
+    }
+
+
     std::shared_ptr<Particle2D<Layout>> m_particles;
     bool m_enabled{true};
     float m_currentTime{0};
@@ -39,6 +45,6 @@ protected:
 
 template<template<typename> typename Layout>
 void ParticleEmitter<Layout>::update(float deltaTime) {
+    onUpdate(deltaTime, deltaTime);
     m_currentTime += deltaTime;
-    onUpdate(m_currentTime, deltaTime);
 }

@@ -103,8 +103,6 @@ private:
         uint32_t max{100000};
     } particles;
 
-    int startParticles{50};
-
     struct {
         VulkanBuffer vertices;
         VulkanBuffer indices;
@@ -116,7 +114,7 @@ private:
         VulkanDescriptorSetLayout setLayout;
         VkDescriptorSet descriptorSet;
     } m_render;
-    int m_numIterations{1};
+    int m_numIterations{4};
     std::array<double, 100> execTime{};
 
 

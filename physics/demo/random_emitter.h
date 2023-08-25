@@ -28,9 +28,14 @@ public:
         return *this;
     }
 
-    RandomParticleEmitter& restitution(int value) {
+    RandomParticleEmitter& restitution(float value) {
         m_restitution = value;
         return *this;
+    }
+
+    [[nodiscard]]
+    int numParticles() const {
+        return m_numParticles;
     }
 
 private:

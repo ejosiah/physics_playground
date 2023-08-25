@@ -3,17 +3,20 @@
 #include <algorithm>
 #include <numeric>
 
-Application2D::Application2D(const std::string& title, Bounds2D bounds)
-: VulkanBaseApp(title, settings2d())
+Application2D::Application2D(const std::string& title, Bounds2D bounds, float width)
+: VulkanBaseApp(title, settings2d(bounds, width))
 , m_bounds(std::move(bounds))
 {
     std::unique_ptr<Plugin> plugin = std::make_unique<ImGuiPlugin>();
     addPlugin(plugin);
 }
 
-Settings Application2D::settings2d() {
+Settings Application2D::settings2d(Bounds2D bounds, float width) {
     Settings s{};
-    s.width = s.width = s.height = 1024;
+    const auto [w, h] = dimensions(bounds);
+    float ar = w/h;
+    s.width =  width;
+    s.height = width/ar;
     s.depthTest = true;
     s.enabledFeatures.wideLines = true;
     s.msaaSamples = VK_SAMPLE_COUNT_16_BIT;

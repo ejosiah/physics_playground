@@ -381,6 +381,8 @@ using SeparateFieldParticles = Particles<L, SeparateFieldMemoryLayout>;
 
 using SeparateFieldParticle2D = Particles<2, SeparateFieldMemoryLayout>;
 
+using ProtoTypeParticle2D = InterleavedMemoryLayout2D::Members;
+
 template<glm::length_t L>
 inline InterleavedMemoryParticles<L> createInterleavedMemoryParticle(std::span<typename InterleavedMemoryParticles<L>::Layout::Members> span) {
     return { { span.data(), span.size() } };
