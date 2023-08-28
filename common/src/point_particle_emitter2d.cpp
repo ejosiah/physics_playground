@@ -2,12 +2,12 @@
 #include <spdlog/spdlog.h>
 
 template<template<typename> typename Layout>
-PointParticleEmitter2D<Layout>::PointParticleEmitter2D(const glm::vec2 origin
-                                                       , const glm::vec2 direction
+PointParticleEmitter2D<Layout>::PointParticleEmitter2D(const glm::vec2& origin
+                                                       , const glm::vec2& direction
                                                        , float speed
                                                        , float spreadAngleDeg
-                                                       , size_t maxNumOfNewParticlePerSecond
-                                                       , size_t maxNumOfParticles
+                                                       , int maxNumOfNewParticlePerSecond
+                                                       , int maxNumOfParticles
                                                        , uint32_t seed
                                                        , ProtoTypeParticle2D prototype)
 : m_origin{ origin }
@@ -34,29 +34,29 @@ void PointParticleEmitter2D<Layout>::onUpdate(float currentTime, float deltaTime
 
     auto elapsedTime = currentTime - m_firstFrameTimeInSeconds;
     auto newMaxTotalNumOfParticlesEmitted =
-            to<size_t>(glm::ceil((elapsedTime + deltaTime) * this->maxNumberOfParticlePerSecond));
+            to<int>(glm::ceil((elapsedTime + deltaTime) * this->maxNumberOfParticlePerSecond));
 
     newMaxTotalNumOfParticlesEmitted = glm::min(newMaxTotalNumOfParticlesEmitted, this->maxNumberOfParticles);
 
     auto maxNumberOfNewParticles = newMaxTotalNumOfParticlesEmitted - m_numberOfEmittedParticles;
 
     if(maxNumberOfNewParticles > 0) {
-        emit(maxNumberOfNewParticles);
+        emit(maxNumberOfNewParticles, deltaTime);
 
-        m_numberOfEmittedParticles += particles->size();
+        m_numberOfEmittedParticles = particles->size();
     }
-
-    spdlog::info("{}: totalToEmit {}, emitted: {}", elapsedTime, newMaxTotalNumOfParticlesEmitted, m_numberOfEmittedParticles);
-
 }
 
 template<template<typename> typename Layout>
-void PointParticleEmitter2D<Layout>::emit(size_t maxNewNumberOfParticles) {
+void PointParticleEmitter2D<Layout>::emit(size_t maxNewNumberOfParticles, float deltaTime) {
     auto particles = this->target();
+    auto t = deltaTime/maxNewNumberOfParticles;
     for(size_t i = 0; i < maxNewNumberOfParticles; ++i){
         auto angle = (random() - 0.5) * m_spreadAngleRad;
         glm::mat2 rotate{ glm::cos(angle), glm::sin(angle), -glm::sin(angle), glm::cos(angle) };
-        this->add(m_origin, m_speed * (rotate * m_direction));
+        auto direction = rotate * m_direction;
+        auto position = m_origin - direction * (i * t);
+        this->add(position, m_speed * direction);
     }
 }
 

@@ -45,6 +45,7 @@ protected:
 
 template<template<typename> typename Layout>
 void ParticleEmitter<Layout>::update(float deltaTime) {
-    onUpdate(deltaTime, deltaTime);
+    if(!enabled()) return;
+    onUpdate(m_currentTime, deltaTime);
     m_currentTime += deltaTime;
 }

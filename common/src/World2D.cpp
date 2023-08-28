@@ -95,6 +95,7 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     auto cAvg = std::accumulate(collisionStats.average.begin(), collisionStats.average.end(), 0.0);
     cAvg /= collisionStats.average.size();
 
+
     ImGui::TextColored({0, 0, 0, 1}, "physics %d ms/frame", to<int>(avg));
     ImGui::TextColored({0, 0, 0, 1}, "%d frames/second", framePerSecond);
     ImGui::TextColored({0, 0, 0, 1}, "%d particles", particles.handle->size());
@@ -103,42 +104,20 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     ImGui::TextColored({0, 0, 0, 1}, "%d max collisions", collisionStats.max);
 
     ImGui::End();
-
-
-
-    ImGui::Begin("controls");
-    ImGui::Checkbox("debug", &debugMode);
-    if(debugMode){
-        ImGui::SameLine();
-        nextFrame = ImGui::Button("nextFrame");
-    }
-    if(ImGui::Button("snapshot")){
-       snapshot();
+    if(avg >= 16){
+        emitter->disable();
     }
 
-//    ImGui::SetWindowSize({0, 0});
-//
-//    if(ImGui::Button("Restart")){
-//        auto n = particles.active;
-//        fillParticles(0);
-//        fillParticles(n);
+//    ImGui::Begin("controls");
+//    ImGui::Checkbox("debug", &debugMode);
+//    if(debugMode){
+//        ImGui::SameLine();
+//        nextFrame = ImGui::Button("nextFrame");
 //    }
-//    ImGui::SameLine();
-//    if(ImGui::Button("Pause")){
-//        paused = !paused;
+//    if(ImGui::Button("snapshot")){
+//       snapshot();
 //    }
-//    ImGui::SameLine();
-//    ImGui::Checkbox("Gravity", &m_gravityOn);
-//
-//    ImGui::SliderFloat("Restitution", &m_restitution, 0.01, 1);
-//    static int nParticles = 0;
-//    static bool dirty = false;
-//    dirty |= ImGui::SliderInt("add Particles", &nParticles, 0, maxParticles);
-//    if(dirty && !ImGui::IsAnyItemActive()){
-//        dirty = false;
-//        fillParticles(nParticles, particles.active);
-//    }
-    ImGui::End();
+//    ImGui::End();
 
     plugin<ImGuiPlugin>(IM_GUI_PLUGIN).draw(commandBuffer);
 
@@ -171,27 +150,6 @@ void World2D<Layout>::update(float time) {
     }
     transferStateToGPU();
 
-//    static float newBalls = 0;
-////    newBalls += time;
-//    if(newBalls > 0.05){
-//        newBalls = 0;
-//        static auto cRand = rng(0, 1, (1 << 11));
-//        if(particles.handle->active < startParticles){
-//            for(int i = particles.handle->active; i < particles.handle->active + 1; i++){
-//                glm::vec2 position{m_radius, m_bounds.upper.y - m_radius};
-//                glm::vec2 velocity{ 27, 0 };
-//                particles.handle->position()[i] = position;
-//                particles.handle->previousPosition()[i] = position - velocity * 0.016667f;
-//                particles.handle->velocity()[i] = velocity;
-//                particles.handle->radius()[i] = m_radius;
-//                particles.handle->inverseMass()[i] = 1.0;
-//                particles.handle->restitution()[i] = m_restitution;
-//                particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
-//            }
-//            particles.handle->active += 1;
-//            solver->numParticles(particles.handle->active);
-//        }
-//    }
 }
 template<template<typename> typename Layout>
 void World2D<Layout>::transferStateToGPU() {
@@ -379,38 +337,6 @@ void World2D<Layout>::colorParticles() {
         return  glm::vec4(cRand(), cRand(), cRand(), 1 );
     });
     particles.color[0] = glm::vec4(0);
-}
-
-template<template<typename> typename Layout>
-void World2D<Layout>::loadParticles()  {
-//    YAML::Node node = YAML::LoadFile("world.yaml");
-//    YAML::Node nodeParticles = node["particles"];
-//    YAML::Node nodeFields = nodeParticles["fields"];
-//    spdlog::info("loaded capacity {}", nodeParticles["capacity"].as<int>());
-//    spdlog::info("num fields {}", nodeFields.size());
-//
-//    static auto seed = (1 << 20);
-//
-//    auto rand = random(m_bounds, seed);
-//    auto vRand = rng(0, 10, seed + (1 << 10));
-//    auto cRand = rng(0, 1, seed + (1 << 11));
-//
-//    particles.handle->active = nodeFields.size();
-//    for(auto i = 0; i < nodeFields.size(); i++){
-//        auto fields = nodeFields[i].as<Fields>();
-//
-//        glm::vec2 position = fields.position;
-//        glm::vec2 velocity = fields.velocity;
-//        particles.handle->position()[i] = position;
-//        particles.handle->previousPosition()[i] = position - velocity * 0.016667f;
-//        particles.handle->velocity()[i] = velocity;
-//        particles.handle->radius()[i] = m_radius;
-//        particles.handle->inverseMass()[i] = 1.0;
-//        particles.handle->restitution()[i] = m_restitution;
-//        particles.color[i] = glm::vec4(cRand(), cRand(), cRand(), 1 );
-//    }
-//
-//    particles.color[0] = glm::vec4(0);
 }
 
 template<template<typename> typename Layout>

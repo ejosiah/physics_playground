@@ -11,12 +11,12 @@ public:
     class Builder;
 
     PointParticleEmitter2D(
-            const glm::vec2 origin
-            , const glm::vec2 direction
+            const glm::vec2& origin
+            , const glm::vec2& direction
             , float speed
             , float spreadAngleDeg
-            , size_t maxNumOfNewParticlePerSecond = 1
-            , size_t maxNumOfParticles = std::numeric_limits<size_t>::max()
+            , int maxNumOfNewParticlePerSecond = 1
+            , int maxNumOfParticles = std::numeric_limits<int>::max()
             , uint32_t seed = 0
             , ProtoTypeParticle2D prototype = {});
 
@@ -26,7 +26,7 @@ public:
 
     void onUpdate(float currentTime, float deltaTime) override;
 
-    void emit(size_t maxNewNumberOfParticles);
+    void emit(size_t maxNewNumberOfParticles, float deltaTime);
 
     void add(glm::vec2 position, glm::vec2 velocity);
 
@@ -34,13 +34,13 @@ private:
     float random();
 
 public:
-    size_t maxNumberOfParticlePerSecond;
-    size_t maxNumberOfParticles;
+    int maxNumberOfParticlePerSecond;
+    int maxNumberOfParticles;
 
 private:
     std::default_random_engine m_rng;
     float m_firstFrameTimeInSeconds{};
-    size_t m_numberOfEmittedParticles{};
+    int m_numberOfEmittedParticles{};
 
     glm::vec2 m_origin;
     glm::vec2 m_direction;
@@ -73,12 +73,12 @@ public:
         return *this;
     }
 
-    Builder& withMaxNumberOfNewParticlesPerSecond(size_t value) {
+    Builder& withMaxNumberOfNewParticlesPerSecond(int value) {
         m_maxNumberOfNewParticlesPerSecond = value;
         return *this;
     }
 
-    Builder& withMaxNumberOfParticles(size_t value) {
+    Builder& withMaxNumberOfParticles(int value) {
         m_maxNumberOfParticles = value;
         return *this;
     }
@@ -142,8 +142,8 @@ public:
     }
 
 private:
-    size_t m_maxNumberOfNewParticlesPerSecond = 1;
-    size_t m_maxNumberOfParticles = std::numeric_limits<size_t>::max();
+    int m_maxNumberOfNewParticlesPerSecond = 1;
+    int m_maxNumberOfParticles = std::numeric_limits<int>::max();
     glm::vec2 m_origin{0, 0};
     glm::vec2 m_direction{0, 1};
     float m_speed = 1.0;

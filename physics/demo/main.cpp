@@ -13,15 +13,15 @@ int main(int, char**){
 //    emitter->bounds(bounds);
 //    emitter->numParticles(400);
 //    emitter->restitution(0.5f);
-    float radius = 0.25f;
+    float radius = 0.1f;
     auto builder = PointParticleEmitter2D<SeparateFieldMemoryLayout>::builder();
     builder
         .withOrigin({radius, bounds.upper.y - radius})
         .withDirection({1, 0})
-        .withSpeed(5)
+        .withSpeed(10)
         .withSpreadAngleInDegrees(0)
         .withMaxNumberOfNewParticlesPerSecond(10)
-        .withMaxNumberOfParticles(1000)
+        .withMaxNumberOfParticles(std::numeric_limits<int>::max())
         .withRandomSeed((1 << 20))
         .withRadius(radius)
         .withMass(1)

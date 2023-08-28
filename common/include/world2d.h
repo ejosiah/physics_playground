@@ -45,8 +45,6 @@ protected:
 
     void colorParticles();
 
-    void loadParticles();
-
     void createDescriptorPool();
 
     void createDescriptorSetLayout();
@@ -114,7 +112,7 @@ private:
         VulkanDescriptorSetLayout setLayout;
         VkDescriptorSet descriptorSet;
     } m_render;
-    int m_numIterations{4};
+    int m_numIterations{8};
     std::array<double, 100> execTime{};
 
 
