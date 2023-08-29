@@ -59,6 +59,8 @@ protected:
 
     void update(float time) override;
 
+    void fixedUpdate(float deltaTime);
+
     void transferStateToGPU();
 
     static Dimension computeSimDimensions(float simWidth, Dimension screenDim);
@@ -118,10 +120,11 @@ private:
 
     float m_restitution{0.5};
     bool m_gravityOn{true};
-    float m_radius{0.5};
+    float m_radius{0.1};
     int physicsFrame{1};
     bool debugMode{false};
     bool nextFrame{false};
+    int fixedUpdatesPerSecond{60};
     std::unique_ptr<ParticleEmitter<Layout>> emitter;
 
 };

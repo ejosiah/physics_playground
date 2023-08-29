@@ -10,6 +10,7 @@
 #include <numeric>
 #include <span>
 #include <type_traits>
+#include <bitset>
 
 template<bool Unbounded = true>
 class SpacialHashGrid2D {
@@ -81,7 +82,7 @@ public:
     template<template<typename> typename Layout>
     void initialize(Particle2D<Layout>& particles, size_t size) {
         const auto numObjects = glm::min(size, m_cellEntries.size());
-
+        m_set.reset();
         std::fill_n(m_counts.begin(), m_counts.size(), 0);
         std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
         const auto positions = particles.position();
@@ -99,6 +100,7 @@ public:
 
         for(auto i = 0; i < numObjects; i++){
             const auto h = hashPosition(positions[i]);
+            m_set.set(h);
             m_counts[h]--;
             this->m_cellEntries[this->m_counts[h]] = i;
         }
@@ -110,6 +112,11 @@ public:
     }
 
     std::span<int32_t> query(glm::vec2 position, glm::vec2 maxDist) {
+        auto h0 = hashPosition(position);
+        if(!m_set.test(h0)){
+            return {};
+        }
+
         auto d0 = intCoords(position - maxDist);
         auto d1 = intCoords(position + maxDist);
 
@@ -161,6 +168,7 @@ private:
     std::vector<int32_t> m_queryIds{};
     uint32_t m_querySize{};
     glm::ivec2 m_gridSize{};
+    std::bitset<1000000> m_set;
 };
 
 

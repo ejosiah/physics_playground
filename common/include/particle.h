@@ -100,7 +100,7 @@ struct Particles {
     };
 
     void add(VecType pos, VecType vel, float invMass, float radius, float restitution) {
-        layout.add(pos, pos + pos * vel * 0.016f, vel, invMass, radius, restitution, _internal.seekHead);
+        layout.add(pos, pos - pos * vel * 0.016f, vel, invMass, radius, restitution, _internal.seekHead);
         _internal.seekHead++;
     }
 

@@ -125,32 +125,32 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 
 template<template<typename> typename Layout>
 void World2D<Layout>::update(float time) {
-    static float pTime = 0;
-
-    static int nextPhysicsRun = 0;
-    pTime += time;
-    nextPhysicsRun++;
-    auto dt = time;
-    if(debugMode){
-        if(!nextFrame){
-            dt = 0;
-        }else{
-            nextFrame = false;
+    if(fixedUpdatesPerSecond == 0){
+        fixedUpdate(time);
+    }else {
+        static float deltaTime = 1.0f / to<float>(fixedUpdatesPerSecond);
+        static float elapsedTime = 0;
+        elapsedTime += time;
+        if(elapsedTime > deltaTime){
+            elapsedTime = 0;
+            fixedUpdate(deltaTime);
         }
     }
-    if(nextPhysicsRun%physicsFrame == 0 && dt != 0) {
-        static int count = 0;
-        emitter->update(dt);
-        auto duration = profile<chrono::milliseconds>([&] {
-              solver->run(dt);
-        });
-        execTime[count++] = to<double>(duration.count());
-        count %= execTime.size();
-        pTime = 0;
-    }
     transferStateToGPU();
-
 }
+
+template<template<typename> typename Layout>
+void World2D<Layout>::fixedUpdate(float deltaTime) {
+    auto dt = deltaTime;
+    static int count = 0;
+    emitter->update(dt);
+    auto duration = profile<chrono::milliseconds>([&] {
+        solver->run(dt);
+    });
+    execTime[count++] = to<double>(duration.count());
+    count %= execTime.size();
+}
+
 template<template<typename> typename Layout>
 void World2D<Layout>::transferStateToGPU() {
     particles.pBuffer.copy(particles.position);
