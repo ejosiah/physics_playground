@@ -50,12 +50,13 @@ void PointParticleEmitter2D<Layout>::onUpdate(float currentTime, float deltaTime
 template<template<typename> typename Layout>
 void PointParticleEmitter2D<Layout>::emit(size_t maxNewNumberOfParticles, float deltaTime) {
     auto particles = this->target();
-    auto t = deltaTime/maxNewNumberOfParticles;
+//    auto t = deltaTime/maxNewNumberOfParticles;
+    auto t = m_prototype.radius;
     for(size_t i = 0; i < maxNewNumberOfParticles; ++i){
         auto angle = (random() - 0.5) * m_spreadAngleRad;
         glm::mat2 rotate{ glm::cos(angle), glm::sin(angle), -glm::sin(angle), glm::cos(angle) };
         auto direction = rotate * m_direction;
-        auto position = m_origin - direction * (i * t);
+        auto position = m_origin + direction * (i * t);
         this->add(position, m_speed * direction);
     }
 }

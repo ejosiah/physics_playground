@@ -12,6 +12,7 @@
 #include <span>
 #include <utility>
 #include <bitset>
+#include <thread>
 
 constexpr float Gravity{-9.8};
 
@@ -39,31 +40,20 @@ public:
 
     void resolveCollision();
 
+    CollisionHandler<Layout>::CollisionStats& collisionStats() {
+        return m_collisionHandler.collisionStats;
+    }
+
     inline void gravity(glm::vec2 value) {
         this->m_gravity = value;
     }
 
 public:
-    struct CollisionStats{
-        std::array<int, 100> average{};
-        int max{0};
-        int min{0};
-        int next{0};
-    };
-
-    CollisionStats collisionStats{};
 
 protected:
     Bounds2D m_worldBounds;
     std::shared_ptr<Particle2D<Layout>> m_particles;
-    Particle2D<Layout>::Position m_position;
-    Particle2D<Layout>::PreviousPosition m_prevPosition;
-    Particle2D<Layout>::Velocity m_velocity;
-    Particle2D<Layout>::InverseMass m_inverseMass;
-    Particle2D<Layout>::Restitution m_restitution;
-    Particle2D<Layout>::Radius m_radius;
     int m_iterations{1};
-    float m_maxRadius{};
     glm::vec2 m_gravity{0, -9.8};
     CollisionHandler<Layout> m_collisionHandler;
 };
@@ -112,14 +102,7 @@ Solver2D<Layout>::Solver2D(std::shared_ptr<Particle2D<Layout>>  particles
         , float maxRadius
         , int iterations)
         : m_particles{ particles }
-        , m_position{ particles->position() }
-        , m_prevPosition{ particles->previousPosition() }
-        , m_velocity{ particles->velocity() }
-        , m_inverseMass{ particles->inverseMass() }
-        , m_restitution{ particles->restitution() }
-        , m_radius{ particles->radius() }
         , m_worldBounds{ worldBounds }
-        , m_maxRadius{ maxRadius }
         , m_iterations{ iterations }
         , m_collisionHandler{particles, worldBounds, maxRadius}
 {}
@@ -129,6 +112,7 @@ void Solver2D<Layout>::run(float dt) {
     const auto N = m_iterations;
     const auto sdt = dt/to<float>(N);
 
+    auto size = m_particles->size();
     for(auto i = 0; i < N; ++i){
         solve(sdt);
     }
@@ -156,10 +140,12 @@ template<template<typename> typename Layout>
 void BasicSolver<Layout>::integrate(float dt) {
     const auto N = this->m_particles->size();
     const glm::vec2 G = this->m_gravity;
+    auto position = this->m_particles->position();
+    auto velocity = this->m_particles->velocity();
 #pragma loop(hint_parallel(8))
     for(int i = 0; i < N; i++){
-        this->m_position[i] += this->m_velocity[i] * dt;
-        this->m_velocity[i] += G * dt;
+        position[i] += velocity[i] * dt;
+        velocity[i] += G * dt;
     }
 }
 
@@ -177,13 +163,16 @@ void VarletIntegrationSolver<Layout>::integrate(float dt) {
     const auto N = this->m_particles->size();
     const glm::vec2 G = this->m_gravity;
 
+    auto position = this->m_particles->position();
+    auto prevPosition = this->m_particles->m_prevPosition();
+    auto velocity = this->m_particles->velocity();
     for(int i = 0; i < N; i++){
-        auto p0 = this->m_prevPosition[i];
-        auto p1 = this->m_position[i];
+        auto p0 = prevPosition[i];
+        auto p1 = position[i];
         auto p2 = 2.f * p1 - p0 + G * dt * dt;
-        this->m_position[i] = p2;
-        this->m_prevPosition[i] = p1;
-        this->m_velocity[i] = (p2 - p1)/dt;
+        position[i] = p2;
+        prevPosition[i] = p1;
+        velocity[i] = (p2 - p1)/dt;
     }
 }
 
@@ -191,7 +180,11 @@ template<template<typename> typename Layout>
 void VarletIntegrationSolver<Layout>::postSolve(float dt) {
     const auto N = this->m_particles->size();
 
+    auto position = this->m_particles->position();
+    auto prevPosition = this->m_particles->m_prevPosition();
+    auto velocity = this->m_particles->velocity();
+
     for(int i = 0; i < N; i++){
-        this->m_prevPosition[i] = this->m_position[i] - this->m_velocity[i] * dt;
+        prevPosition[i] = position[i] - velocity[i] * dt;
     }
 }

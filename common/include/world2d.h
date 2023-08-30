@@ -26,13 +26,15 @@ struct RenderVertex{
     glm::vec4 color;
 };
 
+template<template<typename> typename Layout>
+using Emitters = std::vector<std::unique_ptr<ParticleEmitter<Layout>>>;
 
 template<template<typename> typename Layout>
 class World2D : public VulkanBaseApp {
 public:
     World2D() = default;
 
-    World2D(const std::string& title, Bounds2D bounds, uDimension screenDim, std::unique_ptr<ParticleEmitter<Layout>> emitter);
+    World2D(const std::string& title, Bounds2D bounds, uDimension screenDim, Emitters<Layout>&& emitters);
 
 protected:
     void initApp() final;
@@ -62,6 +64,8 @@ protected:
     void fixedUpdate(float deltaTime);
 
     void transferStateToGPU();
+
+    void checkAppInputs() override;
 
     static Dimension computeSimDimensions(float simWidth, Dimension screenDim);
 
@@ -114,7 +118,7 @@ private:
         VulkanDescriptorSetLayout setLayout;
         VkDescriptorSet descriptorSet;
     } m_render;
-    int m_numIterations{8};
+    int m_numIterations{16};
     std::array<double, 100> execTime{};
 
 
@@ -125,6 +129,6 @@ private:
     bool debugMode{false};
     bool nextFrame{false};
     int fixedUpdatesPerSecond{60};
-    std::unique_ptr<ParticleEmitter<Layout>> emitter;
+    std::vector<std::unique_ptr<ParticleEmitter<Layout>>> emitters;
 
 };

@@ -10,10 +10,10 @@
 #include <memory>
 
 template<template<typename> typename Layout>
-World2D<Layout>::World2D(const std::string &title, Bounds2D bounds, uDimension screenDim, std::unique_ptr<ParticleEmitter<Layout>> emitter)
+World2D<Layout>::World2D(const std::string &title, Bounds2D bounds, uDimension screenDim, Emitters<Layout>&& emitters)
         : VulkanBaseApp(title, create(screenDim))
         , m_bounds(bounds)
-        , emitter(std::move(emitter))
+        , emitters(std::move(emitters))
 {
     std::unique_ptr<Plugin> plugin = std::make_unique<ImGuiPlugin>();
     addPlugin(plugin);
@@ -91,7 +91,7 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     auto avg = std::accumulate(execTime.begin(), execTime.end(), 0.0);
     avg /= (to<double>(execTime.size()));
 
-    auto& collisionStats = solver->collisionStats;
+    auto& collisionStats = solver->collisionStats();
     auto cAvg = std::accumulate(collisionStats.average.begin(), collisionStats.average.end(), 0.0);
     cAvg /= collisionStats.average.size();
 
@@ -105,7 +105,7 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 
     ImGui::End();
     if(avg >= 16){
-        emitter->disable();
+        for(auto& emitter : emitters) emitter->disable();
     }
 
 //    ImGui::Begin("controls");
@@ -141,11 +141,12 @@ void World2D<Layout>::update(float time) {
 
 template<template<typename> typename Layout>
 void World2D<Layout>::fixedUpdate(float deltaTime) {
-    auto dt = deltaTime;
     static int count = 0;
-    emitter->update(dt);
+    for(auto& emitter : emitters) {
+        emitter->update(deltaTime);
+    }
     auto duration = profile<chrono::milliseconds>([&] {
-        solver->run(dt);
+        solver->run(deltaTime);
     });
     execTime[count++] = to<double>(duration.count());
     count %= execTime.size();
@@ -160,6 +161,11 @@ void World2D<Layout>::transferStateToGPU() {
         device.copy(particles.pBuffer, particles.buffer, particles.pBuffer.size);
         device.copy(particles.rBuffer, particles.radiusBuffer, particles.radiusBuffer.size);
     });
+}
+
+template<template<typename> typename Layout>
+void World2D<Layout>::checkAppInputs() {
+
 }
 
 template<template<typename> typename Layout>
@@ -320,7 +326,8 @@ void World2D<Layout>::createParticles() {
     }
     particles.cBuffer = device.createBuffer(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(glm::vec4) * particles.max, "particle_color");
     particles.color = std::span{ reinterpret_cast<glm::vec4*>(particles.cBuffer.map()), particles.max };
-    emitter->set(particles.handle);
+
+    for(auto& emitter : emitters) emitter->set(particles.handle);
     colorParticles();
 //    loadParticles();
     solver = std::make_unique<BasicSolver<Layout>>(particles.handle, m_bounds, m_radius, m_numIterations);

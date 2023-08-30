@@ -11,6 +11,7 @@
 #include <span>
 #include <type_traits>
 #include <bitset>
+#include <glm_format.h>
 
 template<bool Unbounded = true>
 class SpacialHashGrid2D {
@@ -31,10 +32,10 @@ public:
     SpacialHashGrid2D(float spacing, glm::ivec2 gridSize)
     : m_spacing(spacing)
     , m_gridSize(gridSize)
-    , m_tableSize(gridSize.x * gridSize.y)
-    , m_counts(gridSize.x * gridSize.y + 1)
-    , m_cellEntries(gridSize.x * gridSize.y)
-    , m_queryIds(gridSize.x * gridSize.y)
+    , m_tableSize(glm::floor((gridSize.x/spacing * gridSize.y/spacing)))
+    , m_counts(glm::floor(gridSize.x/spacing * gridSize.y/spacing) + 1)
+    , m_cellEntries(glm::floor(gridSize.x/spacing * gridSize.y/spacing))
+    , m_queryIds(glm::floor(gridSize.x/spacing * gridSize.y/spacing))
     , m_querySize(0)
     {}
 
@@ -51,7 +52,7 @@ public:
             const auto h = (pid.x * 92837111) ^ (pid.y * 689287499);
             return glm::abs(h) % static_cast<int32_t>(m_tableSize);
         } else {
-            return pid.x * m_gridSize.y + pid.y;
+            return pid.x + (m_gridSize.x/m_spacing * pid.y);
         }
     }
 
@@ -81,28 +82,34 @@ public:
 
     template<template<typename> typename Layout>
     void initialize(Particle2D<Layout>& particles, size_t size) {
-        const auto numObjects = glm::min(size, m_cellEntries.size());
-        m_set.reset();
-        std::fill_n(m_counts.begin(), m_counts.size(), 0);
-        std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
-        const auto positions = particles.position();
-        for(auto i = 0; i < numObjects; i++){
-            auto h = hashPosition(positions[i]);
-            m_counts[h]++;
-        }
+        try {
+            const auto numObjects = glm::min(size, m_cellEntries.size());
+            m_set.reset();
+            std::fill_n(m_counts.begin(), m_counts.size(), 0);
+            std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
+            const auto positions = particles.position();
+            for (auto i = 0; i < numObjects; i++) {
+                auto h = hashPosition(positions[i]);
+//                spdlog::info("pos: {}, hash: {}", positions[i], h);
+                m_counts[h]++;
+            }
 
-        auto first = m_counts.begin();
-        auto last = m_counts.end();
-        std::advance(last, -1);
-        std::partial_sum(first, last, first);
+            auto first = m_counts.begin();
+            auto last = m_counts.end();
+            std::advance(last, -1);
+            std::partial_sum(first, last, first);
 
-        m_counts[m_tableSize] = m_counts[m_tableSize - 1];
+            m_counts[m_tableSize] = m_counts[m_tableSize - 1];
 
-        for(auto i = 0; i < numObjects; i++){
-            const auto h = hashPosition(positions[i]);
-            m_set.set(h);
-            m_counts[h]--;
-            this->m_cellEntries[this->m_counts[h]] = i;
+            for (auto i = 0; i < numObjects; i++) {
+                const auto h = hashPosition(positions[i]);
+                m_set.set(h);
+                m_counts[h]--;
+                this->m_cellEntries[this->m_counts[h]] = i;
+            }
+        }catch(...){
+            spdlog::error("error initializing grid with num particles {}", size);
+            throw;
         }
     }
 
@@ -112,28 +119,40 @@ public:
     }
 
     std::span<int32_t> query(glm::vec2 position, glm::vec2 maxDist) {
-        auto h0 = hashPosition(position);
-        if(!m_set.test(h0)){
-            return {};
-        }
+        try {
+            auto h0 = hashPosition(position);
+            if (!m_set.test(h0)) {
+                return {};
+            }
 
-        auto d0 = intCoords(position - maxDist);
-        auto d1 = intCoords(position + maxDist);
+            auto d0 = intCoords(position - maxDist);
+            auto d1 = intCoords(position + maxDist);
 
-        std::fill_n(m_queryIds.begin(), m_querySize, 0);
-        m_querySize = 0;
+            if constexpr (!Unbounded) {
+                d0 = glm::max(glm::ivec2(0), d0);
 
-        for(auto xi = d0.x; xi <= d1.x; ++xi){
-            for(auto yi = d0.y; yi <= d1.y; ++yi){
-                const auto h = hash({xi, yi});
-                const auto start = m_counts[h];
-                const auto end = m_counts[h + 1];
+                auto limit = glm::ivec2(glm::vec2(m_gridSize) / m_spacing) - 1;
+                d1 = glm::min(limit, d1);
+            }
 
-                for(auto i = start; i < end; ++i){
-                    this->m_queryIds[m_querySize] = m_cellEntries[i];
-                    m_querySize++;
+            std::fill_n(m_queryIds.begin(), m_querySize, 0);
+            m_querySize = 0;
+
+            for (auto xi = d0.x; xi <= d1.x; ++xi) {
+                for (auto yi = d0.y; yi <= d1.y; ++yi) {
+                    const auto h = hash({xi, yi});
+                    const auto start = m_counts[h];
+                    const auto end = m_counts[h + 1];
+
+                    for (auto i = start; i < end; ++i) {
+                        this->m_queryIds[m_querySize] = m_cellEntries[i];
+                        m_querySize++;
+                    }
                 }
             }
+        }catch(...){
+            spdlog::error("error processing position: {}", position);
+            throw;
         }
 
         return queryResults();
