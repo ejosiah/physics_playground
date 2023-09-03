@@ -1,25 +1,21 @@
 #pragma once
 
+#include "blas_forwards.h"
 #include <vector>
 #include <algorithm>
 #include <initializer_list>
 #include <cmath>
 #include <unordered_map>
 #include <cassert>
+#include <memory>
 
-namespace {
+namespace blas {
 
     enum VectorType {
         Dense, Sparse
     };
 
-    template<typename T>
-    class VectorT;
-
-    template<typename T>
-    class SparseVectorT;
-
-    template<typename T>
+    template<typename T, typename Allocator>
     class VectorT {
     public:
         static constexpr VectorType type = VectorType::Dense;
@@ -165,7 +161,7 @@ namespace {
         }
 
     private:
-        std::vector<T> m_data{};
+        std::vector<T, Allocator> m_data{};
     };
 
 
@@ -219,6 +215,13 @@ namespace {
             }
             static const T zero{};
             return zero;
+        }
+
+        T &operator[](int index)  {
+            if (!m_data.contains(index)) {
+                m_data[index] = 0;
+            }
+           return m_data[index];
         }
 
         void set(EntryT entry) {
@@ -323,17 +326,21 @@ namespace {
             return m_data.cend();
         }
 
+        void clear() {
+            m_data.clear();
+        }
+
     private:
         std::unordered_map<int, T> m_data{};
     };
 
-    template<typename T>
-    VectorT<T>::operator SparseVectorT<T>() const {
+    template<typename T, typename Allocator>
+    VectorT<T, Allocator>::operator SparseVectorT<T>() const {
         return SparseVectorT<T>(*this);
     }
 
-    template<typename T>
-    T VectorT<T>::dot(const SparseVectorT<T> &v1) const {
+    template<typename T, typename Allocator>
+    T VectorT<T, Allocator>::dot(const SparseVectorT<T> &v1) const {
         return v1.dot(*this);
     }
 

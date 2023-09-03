@@ -40,6 +40,13 @@ inline void boundsCheck(Particle2D<Layout>& particle, const Bounds2D& bounds, in
     }
 }
 
+inline bool contains(const Bounds2D& bounds, const glm::vec2& p){
+    auto [min, max] = bounds;
+    return
+        p.x >= min.x && p.x < max.x &&
+        p.y >= min.y && p.y < max.y;
+}
+
 struct Contact {
     int ia{};
     int ib{};
@@ -80,10 +87,12 @@ private:
     std::vector<Contact> m_contacts;
     size_t m_numContacts{};
     float m_maxRadius{};
-    int numThreads{1};
+    int numThreads{4};
     std::barrier<> m_syncPoint;
     std::latch m_startLatch;
     std::vector<std::thread> workers;
+    std::atomic_bool m_startCollisionProcessing{false};
+    std::vector<std::atomic_bool> m_collisionProcessingDone;
 };
 
 template<template<typename> typename Layout>
@@ -92,13 +101,29 @@ std::thread CollisionHandler<Layout>::worker(int id, int numWorkers) {
         m_startLatch.wait();
         auto gridSpacing = m_maxRadius * 2;
 
+        auto gridSize = m_worldBounds.upper - m_worldBounds.lower;
+        auto [sizeX, sizeY] = dimensions(m_worldBounds);
+        auto ratio = 1.f/to<float>(numWorkers);
+        Bounds2D bounds = m_worldBounds;
+        bounds.upper.x *= ratio;
+        bounds.upper.x += to<float>(id) * sizeX * ratio;
+        bounds.lower.x += to<float>(id) * sizeX * ratio;
+
+        spdlog::info("worker({}) working on bounds({}, {})", id, bounds.lower, bounds.upper);
+
         while(true){
-            m_syncPoint.arrive_and_wait();
+//            m_syncPoint.arrive_and_wait();
+            if(!m_startCollisionProcessing) continue;
             const auto numParticles = m_particles->size();
 
             auto vPositions = m_particles->position();
             for(int i = 0; i < numParticles; i++){
                 auto& position = vPositions[i];
+
+                if(!contains(bounds, position)){
+                    continue;
+                }
+
                 auto ids = grid.query(position, glm::vec2(gridSpacing));
 
                 int collisions = 0;
@@ -116,7 +141,8 @@ std::thread CollisionHandler<Layout>::worker(int id, int numWorkers) {
             for(auto i = 0; i < numParticles; i++){
                 boundsCheck(*m_particles, m_worldBounds, i);
             }
-            m_syncPoint.arrive_and_wait();
+//            m_syncPoint.arrive_and_wait();
+            m_collisionProcessingDone[id] = true;
         }
     });
 }
@@ -141,6 +167,7 @@ template<template<typename> typename Layout>
 void CollisionHandler<Layout>::resolveCollision() {
     static bool firstCall = true;
     if(firstCall){
+        m_collisionProcessingDone = std::vector<std::atomic_bool>(numThreads);
         for(auto i = 0; i < numThreads; i++){
             auto thread = worker(i, numThreads);
             workers.push_back(std::move(thread));
@@ -151,8 +178,19 @@ void CollisionHandler<Layout>::resolveCollision() {
 
     const auto numParticles = m_particles->size();
     grid.initialize(*m_particles, numParticles);
-    m_syncPoint.arrive_and_wait();
-    m_syncPoint.arrive_and_wait();
+    m_startCollisionProcessing = true;
+
+    auto done = false;
+    do {
+        for(auto& cDone : m_collisionProcessingDone){
+            done |= cDone.load();
+        }
+    }while(!done);
+    for(auto& cDone : m_collisionProcessingDone){
+        cDone.store(false);
+    }
+//    m_syncPoint.arrive_and_wait();
+//    m_syncPoint.arrive_and_wait();
 
 //    const auto numParticles = m_particles->size();
 //    grid.initialize(*m_particles, numParticles);

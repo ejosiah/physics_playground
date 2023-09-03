@@ -1,5 +1,6 @@
 #pragma once
 
+#include "blas_forwards.h"
 #include "big_vector.h"
 #include <iostream>
 
@@ -8,13 +9,11 @@ namespace blas {
     enum class InversionMethod { LowerTriangular };
 
     template<typename T>
-    class SparseMatrixT;
-
-    template<typename T>
     class MatrixT {
         using Size = std::tuple<size_t, size_t>;
         using RowType = VectorT<T>;
         using Coltype = VectorT<T>;
+        static constexpr VectorType Layout = VectorType::Dense;
     public:
         MatrixT(size_t size) : MatrixT(size, size) {}
 
@@ -27,6 +26,8 @@ namespace blas {
             m_data.resize(list.size());
             std::copy(list.begin(), list.end(), m_data.begin());
         }
+
+//        MatrixT(const SparseMatrixT<T>& source);
 
         MatrixT(const MatrixT<T>& source)
         :m_data(source.m_data.size()){
@@ -67,6 +68,16 @@ namespace blas {
         [[nodiscard]]
         Size size() const {
             return std::make_tuple(m_data[0].size(), m_data.size());
+        }
+
+        [[nodiscard]]
+        size_t rows() const {
+            return m_data.size();
+        }
+
+        [[nodiscard]]
+        size_t columns() const {
+            return m_data[0].size();
         }
 
         auto begin() {
@@ -124,14 +135,16 @@ namespace blas {
             return result;
         }
 
-        template<typename U>
-        static MatrixT<U> identity(size_t size) {
-            MatrixT<U> M(size, size);
-            for(auto i = 0; i < size; i++){
-                M[i][i] = 1;
+        MatrixT<T>& identity() {
+            for(auto& row : m_data){
+                row.clear();
             }
-            return M;
+            for(auto i = 0; i < rows(); i++){
+                m_data[i][i] = T{1};
+            }
+            return *this;
         }
+
 
         template<typename U>
         friend MatrixT<U> operator+(const MatrixT<U>& A, const MatrixT<U>& B) {
@@ -197,65 +210,6 @@ namespace blas {
 
             return result;
         }
-
-        template<typename U>
-        friend MatrixT<U> pow(const MatrixT<U>& matrix, int exponent) {
-            auto [_, rows] = matrix.size();
-            MatrixT<U> result = MatrixT::identity<U>(rows);
-            for(auto i = 0; i < exponent; i++){
-                result = result * matrix;
-            }
-
-            return result;
-        }
-
-        friend bool isLowerTriangular(const auto& matrix) {
-            auto [cols, rows] = matrix.size();
-
-            for(auto i = 0; i < rows; ++i) {
-                for(auto j = i + 1; j < cols; ++j){
-                    if(matrix[i][j] != 0) return false;
-                }
-            }
-            return true;
-        }
-
-        template<typename U>
-        friend  MatrixT<U> lowerTriangularInvert(const MatrixT<U>& matrix) {
-            const auto [cols, rows] = matrix.size();
-            assert(isLowerTriangular(matrix));
-            assert(cols == rows);
-
-
-            MatrixT<U> D(rows, cols);
-
-            for(int i = 0; i < rows; ++i) {
-                D[i][i] = matrix[i][i];
-            }
-            auto N = matrix - D;
-
-            for(int j = 0; j < cols; ++j) {
-                for(auto i = j+1; i < rows; ++i){
-                    N[i][j] /= D[i][i];
-                }
-            }
-
-
-            MatrixT<U> Ninv(rows, cols);
-            for(int k = 1; k < rows; ++k) {
-                Ninv = Ninv + std::pow(-1, k) * pow(N, k);
-            }
-
-            auto QInv = MatrixT::identity<U>(rows) + Ninv;
-
-            MatrixT<U> DInv(rows, cols);
-            for(auto i = 0; i < rows; i++){
-                DInv[i][i] = U{1}/D[i][i];
-            }
-
-            return QInv * DInv;
-        }
-
 
     private:
         std::vector<RowType> m_data{};

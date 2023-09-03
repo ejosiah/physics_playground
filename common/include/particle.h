@@ -417,8 +417,14 @@ inline std::shared_ptr<SeparateFieldParticle2D> createSeparateFieldParticle2DPtr
 inline SeparateFieldParticle2D createSeparateFieldParticle2D(size_t numParticles){
     return { { numParticles } };
 }
+
 inline SeparateFieldParticle2D createSeparateFieldParticle2D(std::span<char> memory){
     return { { memory } };
+}
+
+inline std::shared_ptr<SeparateFieldParticle2D> createSeparateFieldParticle2DPtr(std::span<char> memory){
+    auto particles = SeparateFieldParticle2D{ { memory } };
+    return std::make_shared<SeparateFieldParticle2D>( particles );
 }
 
 template<template<typename> typename Layout>

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <cmath>
+#include "big_vector.h"
 
+#include <cmath>
 /**
  *
  * Preconditions a Matrix using the Incomplete Cholesky factorization
@@ -31,9 +32,11 @@ A precondition(A a) {
         }
     }
 
-    for(auto i = 0; i < N; ++i) {
-        for(auto j = i+1; j < N; ++j){
-            a[i][j] = 0;
+    if constexpr (A::Layout == blas::VectorType::Dense) {
+        for (auto i = 0; i < N; ++i) {
+            for (auto j = i + 1; j < N; ++j) {
+                a[i][j] = 0;
+            }
         }
     }
 

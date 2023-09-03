@@ -1,5 +1,6 @@
 #pragma once
 
+#include "blas_forwards.h"
 #include "big_vector.h"
 #include <tuple>
 #include <unordered_map>
@@ -9,28 +10,27 @@
 namespace blas {
 
     template<typename T>
-    class MatrixT;
-
-    template<typename T>
     class SparseMatrixT {
         using Size = std::tuple<size_t, size_t>;
-        using Coltype = SparseVectorT<T>;
+        using Rowtype = SparseVectorT<T>;
+        static constexpr VectorType Layout = VectorType::Sparse;
     public:
         SparseMatrixT(size_t size) : m_data(size) {}
 
-        SparseMatrixT(std::initializer_list<Coltype> list) {
+        SparseMatrixT(size_t rows, size_t cols) : m_data(rows) {}
+
+        SparseMatrixT(std::initializer_list<Rowtype> list) {
             m_data.resize(list.size());
             std::copy(list.begin(), list.end(), m_data.begin());
         }
 
-        template<typename U>
-        explicit SparseMatrixT(const MatrixT<U>& source);
+        explicit SparseMatrixT(const MatrixT<T>& source);
 
-        Coltype &operator[](int index) {
+        Rowtype &operator[](int index) {
             return m_data[index];
         }
 
-        const Coltype &operator[](int index) const {
+        const Rowtype &operator[](int index) const {
             return m_data[index];
         }
 
@@ -50,6 +50,18 @@ namespace blas {
             return m_data.cend();
         }
 
+        operator MatrixT<T>() const;
+
+        SparseMatrixT<T>& identity() {
+            for(auto& row : m_data){
+                row.clear();
+            }
+            for(auto i = 0; i < rows(); i++){
+                m_data[i].set({i, T{1}});
+            }
+            return *this;
+        }
+
         template<typename U>
         friend VectorT<U> operator*(const SparseMatrixT<U> &matrix, const VectorT<U> &v) {
             auto [cols, rows] = matrix.size();
@@ -63,9 +75,14 @@ namespace blas {
         }
 
         [[nodiscard]]
-        Size size() const {
+        inline Size size() const {
             return std::make_tuple(m_data.size(), m_data.size());
         }
+
+        [[nodiscard]]
+        inline size_t rows() const {
+            return m_data.size();
+        };
 
         template<typename U>
         friend std::ostream& operator<<(std::ostream& out, const SparseMatrixT<U> matrix) {
@@ -81,7 +98,7 @@ namespace blas {
         }
 
     private:
-        std::vector<Coltype> m_data{};
+        std::vector<Rowtype> m_data{};
     };
 
     using SparseMatrix = SparseMatrixT<float>;

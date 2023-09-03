@@ -19,4 +19,5 @@ target_include_directories(common PUBLIC ${COMMON_INCLUDE_DIRS})
 include(GoogleTest)
 add_executable(common_test ${HPP_FILES} ${CPP_FILES} ${TEST_FILES})
 target_link_libraries(common_test PRIVATE common ${GTEST_LIBS} ${CONAN_LIBS})
+
 gtest_discover_tests(common_test)

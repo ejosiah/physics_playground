@@ -1,15 +1,19 @@
-#include <format>
-#include <numeric>
-
 #include "matrix.h"
+#include "test_matrix_generator.h"
+
 #include "linear_systems.h"
+#include "preconditioner.h"
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include "preconditioner.h"
+#include <random>
+#include <numeric>
+#include <format>
+
 
 struct ichoPreconditioner {
-    template<typename T>
-    blas::MatrixT<T> operator()(blas::MatrixT<T>& matrix) {
+
+    template<typename Matrix>
+    Matrix operator()(const Matrix& matrix) const {
         auto M =  precondition(matrix);
         return lowerTriangularInvert(M);
     }
@@ -85,7 +89,7 @@ TEST_F(LinearSystemsFixture, ConjugateGradientSolver) {
             {2, 6}
     };
 
-    auto iterations = lns::conjugate_gradient(A, x, b, 0.0003, lns::IdentityPreconditioner{});
+    auto iterations = lns::conjugate_gradient(A, x, b, lns::IdentityPreconditioner{}, 0.0003);
     std::printf("iterations %zu\n", iterations);
 
     ASSERT_NEAR(2, x[0], 0.01);
@@ -108,7 +112,6 @@ TEST_F(LinearSystemsFixture, playground) {
     Vector x(8);
 
     auto threshold = 1e-10;
-
     auto iterations = lns::gauss_seidel(A, x, b, threshold);
 
     std::printf("gauss_seidel, iterations(%zu):\n\t", iterations);
@@ -130,13 +133,44 @@ TEST_F(LinearSystemsFixture, playground) {
         std::printf("%f ", v);
     }
 
+    auto pc = ichoPreconditioner{};
+    iterations = 8;
     x.clear();
-    iterations = lns::conjugate_gradient(A, x, b, threshold, lns::IdentityPreconditioner{});
+    iterations = lns::conjugate_gradient(A, x, b, pc, threshold, iterations);
     std::printf("\nconjugate_gradient, iterations(%zu):\n\t", iterations);
     for(auto v : x){
         std::printf("%f ", v);
     }
 
+}
+
+TEST_F(LinearSystemsFixture, loadMatrix) {
+//    SparseMatrix matrix = load<float>(R"(C:\Users\Josiah Ebhomenye\CLionProjects\physics_playground\common\data\1138_bus.mtx)");
+    SparseMatrix matrix = generateMatrix(128);
+    Vector expected(matrix.rows());
+
+//    std::cout << matrix << "\n";
+
+    std::default_random_engine engine{ (1 << 20) };
+    std::uniform_int_distribution<int> dist{-100, 100};
+
+    std::generate(expected.begin(), expected.end(), [&]{ return static_cast<float>(dist(engine)); });
+
+    Vector b = matrix * expected;
+    Vector x(matrix.rows());
+    auto pc = lns::IdentityPreconditioner{};
+    auto A = static_cast<MatrixT<float>>(matrix);
+    auto iterations = lns::jacobi(matrix, x, b, 1e-4);
+//    auto iterations = lns::conjugate_gradient(matrix, x, b, pc, 1e-4, x.size());
+    std::cout << std::format("found solution after {} iterations\n", iterations);
+
+    for(int i = 0; i < 10; i++){
+        std::cout << std::format("{} <=> {}\n", expected[i], x[i]);
+    }
+
+    for(auto i = 0; i < matrix.rows(); i++){
+        ASSERT_NEAR(expected[i], x[i], 0.1);
+    }
 }
 
 TEST_F(LinearSystemsFixture, sparseMatrix) {

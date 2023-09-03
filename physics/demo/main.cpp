@@ -28,6 +28,11 @@ int main(int, char**){
     Emitters<SeparateFieldMemoryLayout> emitters{};
     emitters.push_back(std::move(builder.makeUnique()));
 
+    builder
+        .withOrigin({bounds.upper.x - radius * 2, bounds.upper.y - 2 * radius})
+        .withDirection({-1, 0});
+
+    emitters.push_back(std::move(builder.makeUnique()));
 
     World2D<SeparateFieldMemoryLayout> world{"physics world", bounds, {1024, 1024}
     , std::move(emitters) };
