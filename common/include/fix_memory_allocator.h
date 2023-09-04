@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <vector>
 
-template<typename T, size_t Size>
+template<typename T>
 class FixedMemoryAllocatorT {
     using value_type = T;
     using pointer = T*;
@@ -15,7 +15,9 @@ class FixedMemoryAllocatorT {
     using is_always_equal  = std::true_type;
 
 public:
-    FixedMemoryAllocatorT() : _memory(Size) {
+    FixedMemoryAllocatorT() = default;
+
+    FixedMemoryAllocatorT(size_t size) : _memory(size) {
         allocationPtr = _memory.data();
     }
 
@@ -35,4 +37,4 @@ private:
 };
 
 template<size_t Size>
-using FixedMemoryAllocator = FixedMemoryAllocatorT<float, Size>;
+using FixedMemoryAllocator = FixedMemoryAllocatorT<float>;

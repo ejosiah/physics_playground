@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <cassert>
 #include <memory>
+#include <iterator>
 
 namespace blas {
 
@@ -15,34 +16,155 @@ namespace blas {
         Dense, Sparse
     };
 
-    template<typename T, typename Allocator>
+    template<typename T>
     class VectorT {
     public:
         static constexpr VectorType type = VectorType::Dense;
 
-        VectorT() = default;
+    class iterator : public std::iterator<
+                                std::random_access_iterator_tag,
+                                T,
+                                std::ptrdiff_t,
+                                const T*,
+                                const T&>{
 
-        VectorT(size_t size)
-                : m_data(size) {}
+    public:
+        iterator(T* start)
+        : m_ptr{start}
+        {}
 
-        VectorT(std::initializer_list<T> list) {
-            m_data.resize(list.size());
-            std::copy(list.begin(), list.end(), m_data.begin());
+        iterator& operator++() noexcept {
+            ++m_ptr;
+            return *this;
         }
 
-        VectorT(const VectorT &source) {
-            m_data.resize(source.size());
-            std::copy(source.cbegin(), source.cend(), m_data.begin());
+        iterator& operator--() noexcept {
+            --m_ptr;
+            return *this;
+        }
+
+        iterator& operator++() const noexcept {
+            ++m_ptr;
+            return *this;
+        }
+
+        iterator& operator--() const noexcept {
+            --m_ptr;
+            return *this;
+        }
+
+        iterator operator++(int) noexcept {
+            iterator retval = *this;
+            ++(*this);
+            return retval;
+        }
+
+
+        iterator operator--(int) noexcept {
+            iterator retval = *this;
+            --(*this);
+            return retval;
+        }
+
+        iterator operator++(int) const noexcept {
+            iterator retval = *this;
+            ++(*this);
+            return retval;
+        }
+
+
+        iterator operator--(int) const noexcept {
+            iterator retval = *this;
+            --(*this);
+            return retval;
+        }
+
+        bool operator==(iterator other) const noexcept {return m_ptr == other.m_ptr;}
+
+        bool operator!=(iterator other) const noexcept {return !(*this == other);}
+
+        const T& operator*() const noexcept { return *m_ptr; }
+
+        T& operator*()  noexcept { return *m_ptr; }
+
+        const T* operator->() const noexcept {
+            return m_ptr;
+        }
+
+        T* operator->() noexcept {
+            return m_ptr;
+        }
+
+        iterator& operator+=(long offset) noexcept {
+            m_ptr += offset;
+            return *this;
+        }
+
+        iterator& operator-=(long offset) noexcept {
+            m_ptr -= offset;
+            return *this;
+        }
+
+        iterator& operator+=(long offset) const noexcept {
+            m_ptr += offset;
+            return *this;
+        }
+
+        iterator& operator-=(long offset) const noexcept {
+            m_ptr -= offset;
+            return *this;
+        }
+
+        ptrdiff_t operator-(iterator other) const noexcept {
+            return reinterpret_cast<char*>(m_ptr) - reinterpret_cast<char*>(other.m_ptr);
+        }
+
+
+    private:
+        mutable T* m_ptr;
+        long m_offset{0};
+    };
+
+        VectorT() = default;
+
+        explicit VectorT(size_t size)
+                : m_size{ size }
+                , m_data{new T[size] } {
+            clear();
+        }
+
+        VectorT(T* allocation, size_t size)
+        : m_size{ size }
+        , m_data{ allocation }
+        , owned{ false }
+        {}
+
+       ~VectorT() noexcept {
+            if(owned && m_data){
+                delete[] m_data;
+            }
+        }
+
+        VectorT(std::initializer_list<T> list)
+        :VectorT(list.size()){
+            std::copy(list.begin(), list.end(), begin());
+        }
+
+        VectorT(const VectorT &source)
+        :VectorT(source.m_size){
+            std::copy(source.cbegin(), source.cend(), begin());
         }
 
         VectorT(VectorT &&source) noexcept {
             source.m_data = std::exchange(m_data, source.m_data);
+            source.m_size = std::exchange(m_size, source.m_size);
         }
 
         VectorT &operator=(const VectorT &source) {
             if (this != &source) {
-                m_data.resize(source.size());
-                std::copy(source.m_data.begin(), source.m_data.end(), m_data.begin());
+                m_size = source.m_size;
+                m_data = new T[m_size];
+                std::copy(source.cbegin(), source.cend(), begin());
             }
             return *this;
         }
@@ -50,29 +172,30 @@ namespace blas {
         VectorT &operator=(VectorT &&source) noexcept {
             if (this != &source) {
                 source.m_data = std::exchange(m_data, source.m_data);
+                source.m_size = std::exchange(m_size, source.m_size);
             }
             return *this;
         }
 
         [[nodiscard]]
         size_t size() const {
-            return m_data.size();
+            return m_size;
         }
 
         auto begin() {
-            return m_data.begin();
+            return iterator{ m_data };
         }
 
         auto end() {
-            return m_data.end();
+            return iterator{ m_data + m_size};
         }
 
         auto cbegin() const {
-            return m_data.cbegin();
+            return iterator{ m_data };
         }
 
         auto cend() const {
-            return m_data.cend();
+            return iterator{ m_data + m_size};
         }
 
         T &operator[](int index) {
@@ -84,12 +207,9 @@ namespace blas {
         }
 
         void clear() {
-            std::fill_n(m_data.begin(), m_data.size(), T{});
+            std::fill_n(begin(), m_size, T{});
         }
 
-        void resize(size_t newSize) {
-            m_data.resize(newSize);
-        }
 
         operator SparseVectorT<T>() const;
 
@@ -161,7 +281,10 @@ namespace blas {
         }
 
     private:
-        std::vector<T, Allocator> m_data{};
+        T* m_data{};
+        size_t m_size{};
+        bool owned{true};
+        std::vector<T> v;
     };
 
 
@@ -334,13 +457,13 @@ namespace blas {
         std::unordered_map<int, T> m_data{};
     };
 
-    template<typename T, typename Allocator>
-    VectorT<T, Allocator>::operator SparseVectorT<T>() const {
+    template<typename T>
+    VectorT<T>::operator SparseVectorT<T>() const {
         return SparseVectorT<T>(*this);
     }
 
-    template<typename T, typename Allocator>
-    T VectorT<T, Allocator>::dot(const SparseVectorT<T> &v1) const {
+    template<typename T>
+    T VectorT<T>::dot(const SparseVectorT<T> &v1) const {
         return v1.dot(*this);
     }
 
