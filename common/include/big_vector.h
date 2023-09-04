@@ -15,7 +15,7 @@ namespace blas {
         Dense, Sparse
     };
 
-    template<typename T, typename Allocator>
+    template<typename T>
     class VectorT {
     public:
         static constexpr VectorType type = VectorType::Dense;
@@ -91,6 +91,13 @@ namespace blas {
             m_data.resize(newSize);
         }
 
+        template<typename U>
+        VectorT<U> from(U* data, size_t size){
+            VectorT<U> v(size);
+            std::copy(data, data + static_cast<int>(size), v.begin());
+            return v;
+        }
+
         operator SparseVectorT<T>() const;
 
         template<typename U>
@@ -161,7 +168,7 @@ namespace blas {
         }
 
     private:
-        std::vector<T, Allocator> m_data{};
+        std::vector<T> m_data{};
     };
 
 
@@ -334,13 +341,13 @@ namespace blas {
         std::unordered_map<int, T> m_data{};
     };
 
-    template<typename T, typename Allocator>
-    VectorT<T, Allocator>::operator SparseVectorT<T>() const {
+    template<typename T>
+    VectorT<T>::operator SparseVectorT<T>() const {
         return SparseVectorT<T>(*this);
     }
 
-    template<typename T, typename Allocator>
-    T VectorT<T, Allocator>::dot(const SparseVectorT<T> &v1) const {
+    template<typename T>
+    T VectorT<T>::dot(const SparseVectorT<T> &v1) const {
         return v1.dot(*this);
     }
 
