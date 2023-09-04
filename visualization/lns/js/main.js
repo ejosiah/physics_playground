@@ -38,7 +38,7 @@ const extractSizes = benchmarks => {
     const metadata = [];
 
     for(const size of sizes){
-        metadata.push({size, names, colors});
+        metadata.push({ size : Number(size), names, colors});
     }
 
     return metadata;
@@ -49,35 +49,63 @@ const metadata = extractSizes(benchmarks);
 console.log(metadata);
 
 const data = [];
+const hcolors = [];
+// const alldatasets = [];
+for(let i = 0; i < history.length; i++){
+    const colors = [];
+    for(let j = 0; j < metadata.length; j++){
+        colors.push(randomColor());
+    }
+    hcolors.push(colors);
+}
+//
+//
+//
+// for(let j = 0; j < metadata.length; j++){
+//     datasets.push(            {
+//         label: `Linear system solvers ${j} run(${i})`,
+//         data: [],
+//         borderWidth: 1,
+//         backgroundColor: hcolors[i]
+//     })
+//     for(let i = 0; i < history.length; i++){
+//         datasets.push(
+//             label: `Linear system solvers ${j} run(${i})`,
+//             data: [],
+//             borderWidth: 1,
+//             backgroundColor: hcolors[i]
+//         )
+//     }
+// }
+
 
 for(let { size, names, colors }  of metadata){
-    colors.push(randomColor());
     data.push({
         labels: names,
-        datasets: [
-            {
-                label: `Linear system solvers ${size}`,
-                data: [],
-                borderWidth: 1,
-                backgroundColor: colors
-            }
-        ]
+        datasets: []
     });
+    for(let i = 0; i < history.length; i++){
+        data[data.length - 1].datasets.push(            {
+            label: `Linear system solvers ${size} run(${i})`,
+            data: [],
+            borderWidth: 1,
+            backgroundColor: hcolors[i]
+        })
+    }
 }
 
 for(const entry of data){
     console.log(entry);
 }
 
+for(let i = 0; i < history.length; i++) {
+    for (const benchmark of history[i].benchmarks) {
+        const [_, name, size] = benchmark.name.split("/");
+        const index = metadata.findIndex(e => e.size == size);
+        data[index].datasets[i].data.push(benchmark.real_time / 1e+6);
 
-for (const benchmark of benchmarks) {
-    const [_, name, size] = benchmark.name.split("/");
-    const index = metadata.findIndex( e => e.size == size );
-    data[index].datasets[0].data.push(benchmark.lns_iterations);
 
-   /* data[0].labels.push(label);
-    data[0].datasets[0].data.push(Math.log(benchmark.cpu_time));
-    data[0].datasets[0].backgroundColor.push(randomColor());*/
+    }
 }
 
 for(const entry of data) {
