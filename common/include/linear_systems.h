@@ -62,10 +62,11 @@ namespace lns {
             auto ox = xOld[0];
             for(size_t i = 0; i < rows; i++){
                 decltype(t) sum{};
-                x[i] = (b[i] / a[i][i]);
+                const auto aii = a[i][i];
+                x[i] = (b[i] / aii);
                 for(size_t j = 0; j < cols; j++){
                     if( i == j) continue;
-                    x[i] = x[i] - (a[i][j] / a[i][i]) * xOld[j];
+                    x[i] = x[i] - (a[i][j] / aii) * xOld[j];
                     xOld[i] = x[i];
                 }
             }
@@ -82,14 +83,15 @@ namespace lns {
         while(!sentinel){
             auto ox = xOld;
             for(size_t i = 0; i < rows; i++){
-                x[i] = (b[i] / a[i][i]);
+                const auto aii = a[i][i];
+                x[i] = (b[i] / aii);
                 for(size_t j = 0; j < cols; j++){
                     if( i == j) continue;
-                    x[i] = x[i] - (a[i][j] / a[i][i]) * xOld[j];
+                    x[i] = x[i] - (a[i][j] / aii) * xOld[j];
                     xOld[i] = x[i];
                 }
                 auto err = x - ox;
-                sentinel = std::all_of(err.begin(), err.end(), [tol=threshold](auto error){ return error < tol; });
+                sentinel = !std::any_of(err.begin(), err.end(), [tol=threshold](auto error){ return error > tol; });
             }
             k++;
         }
@@ -140,7 +142,7 @@ namespace lns {
         auto invM = preconditioner(a);
         auto xi = x;
         auto r = b - a * xi;
-        auto d = invM * r;
+        auto d = r;
         auto rd = r.dot(d);
         auto rd0 = rd;
         auto epsilon = threshold * threshold * rd0;
@@ -157,7 +159,7 @@ namespace lns {
                 r = r - alpha * q;
             }
 
-            auto s = invM * r;
+            auto s = r;
             rd0 = rd;
             rd = r.dot(s);
             auto beta = rd/rd0;

@@ -64,6 +64,13 @@ namespace blas {
             return result;
         }
 
+        void set(int i, int j, T value) {
+            m_data[i][j] = value;
+        }
+
+        T get(int i, int j) const {
+            return m_data[i][j];
+        }
 
         [[nodiscard]]
         Size size() const {
