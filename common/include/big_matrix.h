@@ -2,6 +2,7 @@
 
 #include "blas_forwards.h"
 #include "big_vector.h"
+#include "fix_memory_allocator.h"
 #include <iostream>
 
 namespace blas {
@@ -18,24 +19,29 @@ namespace blas {
         MatrixT(size_t size) : MatrixT(size, size) {}
 
         MatrixT(size_t rows, size_t columns)
-                : m_data(rows) {
-            std::fill(m_data.begin(), m_data.end(), RowType(columns));
+                : m_data(rows)
+                , m_allocator{rows * columns}{
+
+            std::fill(m_data.begin(), m_data.end(), RowType(m_allocator.allocate(columns), columns));
         }
 
-        MatrixT(std::initializer_list<RowType> list) {
-            m_data.resize(list.size());
+        MatrixT(std::initializer_list<RowType> list)
+        : MatrixT(list.size())
+        {
             std::copy(list.begin(), list.end(), m_data.begin());
         }
 
 //        MatrixT(const SparseMatrixT<T>& source);
 
         MatrixT(const MatrixT<T>& source)
-        :m_data(source.m_data.size()){
+        :MatrixT(source.m_data.size()){
             std::copy(source.m_data.cbegin(), source.m_data.end(), m_data.begin());
         }
 
         MatrixT<T>& operator=(const MatrixT<T>& source) {
             if(this != &source){
+                auto [cols, rows] = source.size();
+                m_allocator = FixedMemoryAllocatorT<T>{rows * cols};
                 m_data.resize(source.m_data.size());
                 std::copy(source.m_data.begin(), source.m_data.end(), m_data.begin());
             }
@@ -213,6 +219,8 @@ namespace blas {
 
     private:
         std::vector<RowType> m_data{};
+        FixedMemoryAllocatorT<T> m_allocator{};
+
     };
 
     using Matrix = MatrixT<float>;

@@ -145,8 +145,9 @@ TEST_F(LinearSystemsFixture, playground) {
 }
 
 TEST_F(LinearSystemsFixture, loadMatrix) {
-//    SparseMatrix matrix = load<float>(R"(C:\Users\Josiah Ebhomenye\CLionProjects\physics_playground\common\data\1138_bus.mtx)");
-    SparseMatrix matrix = generateMatrix(128);
+    constexpr double tolerance = 1e-4;
+    SparseMatrix matrix = load<float>(R"(C:\Users\Josiah Ebhomenye\CLionProjects\physics_playground\common\data\1138_bus.mtx)");
+//    SparseMatrix matrix = generateMatrix(8192);
     Vector expected(matrix.rows());
 
 //    std::cout << matrix << "\n";
@@ -160,8 +161,10 @@ TEST_F(LinearSystemsFixture, loadMatrix) {
     Vector x(matrix.rows());
     auto pc = lns::IdentityPreconditioner{};
     auto A = static_cast<MatrixT<float>>(matrix);
-    auto iterations = lns::jacobi(matrix, x, b, 1e-4);
-//    auto iterations = lns::conjugate_gradient(matrix, x, b, pc, 1e-4, x.size());
+//    auto iterations = lns::jacobi(matrix, x, b, tolerance);
+    auto iterations = lns::gauss_seidel(matrix, x, b, tolerance);
+//    auto iterations = lns::conjugate_gradient(A, x, b, pc, tolerance, x.size());
+//    auto iterations = lns::gradient_descent(matrix, x, b, tolerance, x.size() * 5);
     std::cout << std::format("found solution after {} iterations\n", iterations);
 
     for(int i = 0; i < 10; i++){

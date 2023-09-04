@@ -4,7 +4,7 @@
 
 namespace blas {
 
-    template<typename T, typename Allocator = std::allocator<T>>
+    template<typename T>
     class VectorT;
 
     template<typename T>
