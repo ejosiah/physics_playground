@@ -58,26 +58,6 @@ for(let i = 0; i < history.length; i++){
     }
     hcolors.push(colors);
 }
-//
-//
-//
-// for(let j = 0; j < metadata.length; j++){
-//     datasets.push(            {
-//         label: `Linear system solvers ${j} run(${i})`,
-//         data: [],
-//         borderWidth: 1,
-//         backgroundColor: hcolors[i]
-//     })
-//     for(let i = 0; i < history.length; i++){
-//         datasets.push(
-//             label: `Linear system solvers ${j} run(${i})`,
-//             data: [],
-//             borderWidth: 1,
-//             backgroundColor: hcolors[i]
-//         )
-//     }
-// }
-
 
 for(let { size, names, colors }  of metadata){
     data.push({
@@ -111,7 +91,7 @@ for(let i = 0; i < history.length; i++) {
 for(const entry of data) {
     const div = document.createElement("div");
     div.innerHTML = "<canvas width='500' height='300'></canvas>"
-    document.body.appendChild(div);
+    document.querySelector('main').appendChild(div);
 
     new Chart(div.querySelector('canvas'), {
         type: 'bar',
