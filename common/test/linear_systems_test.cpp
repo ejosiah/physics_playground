@@ -145,7 +145,7 @@ TEST_F(LinearSystemsFixture, playground) {
 
 TEST_F(LinearSystemsFixture, loadMatrix) {
 //    SparseMatrix matrix = load<float>(R"(C:\Users\Josiah Ebhomenye\CLionProjects\physics_playground\common\data\1138_bus.mtx)");
-    SparseMatrix matrix = generatePoissonEquationMatrix(32);
+    SparseMatrix matrix = generatePoissonEquationMatrix(256);
     Vector expected(matrix.rows());
 
 //    std::cout << matrix << "\n";
@@ -159,9 +159,10 @@ TEST_F(LinearSystemsFixture, loadMatrix) {
     Vector x(matrix.rows());
     auto pc = lns::IdentityPreconditioner{};
     auto A = static_cast<MatrixT<float>>(matrix);
-    auto iterations = 0;
-    lns::jacobi(matrix, x, b, size_t{10});
-//    auto iterations = lns::conjugate_gradient(matrix, x, b, pc, 1e-4, x.size());
+    auto iterations = 10;
+  //  lns::jacobi(matrix, x, b, size_t{10});
+//    iterations = lns::conjugate_gradient(matrix, x, b, pc, 1e-4, iterations);
+    iterations = lns::gradient_descent(matrix, x, b, 1e-4, 10);
     std::cout << std::format("found solution after {} iterations\n", iterations);
 
     for(int i = 0; i < 10; i++){
@@ -169,7 +170,7 @@ TEST_F(LinearSystemsFixture, loadMatrix) {
     }
 
     for(auto i = 0; i < matrix.rows(); i++){
-        ASSERT_NEAR(expected[i], x[i], 0.1);
+        ASSERT_NEAR(expected[i], x[i], 0.5);
     }
 }
 

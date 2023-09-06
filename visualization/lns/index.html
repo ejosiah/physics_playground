@@ -5,13 +5,30 @@
     <title>Linear System Solvers</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        main {
-            max-width: 1024px;
+        main.content {
+            max-width: 1500px;
             margin-inline: auto;
             text-align: center;
         }
-        div {
-            margin-bottom: 2em;
+        /*div {*/
+        /*    margin-bottom: 2em;*/
+        /*}*/
+
+        /*div.controls, div.graph {*/
+        /*    border: 1px solid red;*/
+        /*}*/
+
+        .wrapper {
+            display: grid;
+            grid-template-columns : 1fr 3fr;
+            gap: 10px;
+        }
+
+        .controls {
+            grid-column: 1/2;
+        }
+        .graph {
+            grid-column: 2/2;
         }
     </style>
     <script type="module">
@@ -19,8 +36,15 @@
     </script>
 </head>
 <body>
-<main>
+<main class="content">
     <h1>Linear systems solver compare</h1>
+    <div class="wrapper">
+        <div class="controls">
+            <header><h2>Controls</h2></header>
+            <main></main>
+        </div>
+        <div class="graph"></div>
+    </div>
 </main>
 </body>
 </html>

@@ -11,15 +11,15 @@
 class LinearSystemsFixture : public benchmark::Fixture {
 public:
     void SetUp(const benchmark::State &state) override {
-        gs_iterations[32] = 28;
-        gs_iterations[64] = 28;
-        gs_iterations[128] = 28;
-        gs_iterations[256] = 28;
+        gs_iterations[32] = 10;
+        gs_iterations[64] = 10;
+        gs_iterations[128] = 10;
+        gs_iterations[256] = 10;
 
-        jc_iterations[32] = 53;
-        jc_iterations[64] = 53;
-        jc_iterations[128] = 57;
-        jc_iterations[256] = 56;
+        jc_iterations[32] = 10;
+        jc_iterations[64] = 10;
+        jc_iterations[128] = 10;
+        jc_iterations[256] = 10;
 
     }
 
@@ -32,6 +32,7 @@ public:
     lns::IdentityPreconditioner pc{};
     std::map<size_t, size_t> gs_iterations;
     std::map<size_t, size_t> jc_iterations;
+    size_t maxIterations = 10;
 };
 
 
@@ -130,7 +131,7 @@ BENCHMARK_DEFINE_F(LinearSystemsFixture, gradientDesentDenseMatrix)(benchmark::S
         state.PauseTiming();
         x.clear();
         state.ResumeTiming();
-        iterations += lns::gradient_descent(A, x, b, Tolerance, state.range(0) * 5);
+        iterations += lns::gradient_descent(A, x, b, Tolerance, maxIterations);
     }
     state.counters["lns_iterations"] = static_cast<double>(iterations)/state.iterations();
 }
@@ -150,7 +151,7 @@ BENCHMARK_DEFINE_F(LinearSystemsFixture, gradientDesentSparseMatrix)(benchmark::
         state.PauseTiming();
         x.clear();
         state.ResumeTiming();
-        iterations += lns::gradient_descent(A, x, b, Tolerance, state.range(0) * 5);
+        iterations += lns::gradient_descent(A, x, b, Tolerance, maxIterations);
     }
     state.counters["lns_iterations"] = static_cast<double>(iterations)/state.iterations();
 }
@@ -170,7 +171,7 @@ BENCHMARK_DEFINE_F(LinearSystemsFixture, conjugateGradientDenseMatrix)(benchmark
         state.PauseTiming();
         x.clear();
         state.ResumeTiming();
-        iterations += lns::conjugate_gradient(A, x, b, pc, Tolerance, x.size());
+        iterations += lns::conjugate_gradient(A, x, b, pc, Tolerance, maxIterations);
     }
     state.counters["lns_iterations"] = static_cast<double>(iterations)/state.iterations();
 }
@@ -190,17 +191,17 @@ BENCHMARK_DEFINE_F(LinearSystemsFixture, conjugateGradientSparseMatrix)(benchmar
         state.PauseTiming();
         x.clear();
         state.ResumeTiming();
-        iterations += lns::conjugate_gradient(A, x, b, pc, Tolerance, x.size());
+        iterations += lns::conjugate_gradient(A, x, b, pc, Tolerance, maxIterations);
     }
     state.counters["lns_iterations"] = static_cast<double>(iterations)/state.iterations();
 }
 
 
-BENCHMARK_REGISTER_F(LinearSystemsFixture, jacobiSolverDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-BENCHMARK_REGISTER_F(LinearSystemsFixture, jacobiSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-BENCHMARK_REGISTER_F(LinearSystemsFixture, gaussSeidelDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-BENCHMARK_REGISTER_F(LinearSystemsFixture, gaussSeidelSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-BENCHMARK_REGISTER_F(LinearSystemsFixture, gradientDesentDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-BENCHMARK_REGISTER_F(LinearSystemsFixture, gradientDesentSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-BENCHMARK_REGISTER_F(LinearSystemsFixture, conjugateGradientDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-BENCHMARK_REGISTER_F(LinearSystemsFixture, conjugateGradientSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+//BENCHMARK_REGISTER_F(LinearSystemsFixture, jacobiSolverDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+//BENCHMARK_REGISTER_F(LinearSystemsFixture, jacobiSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<4);
+//BENCHMARK_REGISTER_F(LinearSystemsFixture, gaussSeidelDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+//BENCHMARK_REGISTER_F(LinearSystemsFixture, gaussSeidelSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<4);
+//BENCHMARK_REGISTER_F(LinearSystemsFixture, gradientDesentDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, gradientDesentSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<4);
+//BENCHMARK_REGISTER_F(LinearSystemsFixture, conjugateGradientDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+//BENCHMARK_REGISTER_F(LinearSystemsFixture, conjugateGradientSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<4);
