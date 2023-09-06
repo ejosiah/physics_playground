@@ -31,7 +31,7 @@ const extractSizes = benchmarks => {
     for(const benchmark of benchmarks){
         const [_, name, size] = benchmark.name.split("/");
         if(size == sizes[0]){
-            names.push(`${name} (ms)`);
+            names.push(`${name} (${benchmark.time_unit})`);
         }
     }
 
@@ -82,7 +82,7 @@ for(let i = 0; i < history.length; i++) {
     for (const benchmark of history[i].benchmarks) {
         const [_, name, size] = benchmark.name.split("/");
         const index = metadata.findIndex(e => e.size == size);
-        data[index].datasets[i].data.push(benchmark.real_time / 1e+6);
+        data[index].datasets[i].data.push(benchmark.real_time);
 
 
     }

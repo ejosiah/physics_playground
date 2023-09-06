@@ -20,3 +20,56 @@ blas::SparseMatrix generateMatrix(size_t size, float c = 1) {
 
      return sm;
 }
+
+/**
+ *
+ * @param M - number of rows in grid
+ * @param N - number of columns in grid
+ * @param scale - scaling factor
+ * @return
+ */
+blas::SparseMatrix generatePoissonEquationMatrix(size_t M, size_t N, float scale = 1) {
+    blas::SparseMatrix m(M * N);
+
+    for(int r = 0; r < M; r++){
+        for(int c = 0; c < N; c++){
+            auto left = c - 1;
+            auto right = c + 1;
+            auto top = r + 1;
+            auto bottom = r - 1;
+            int i = r * N + c;
+
+            float s = 4.0;
+            if(left >= 0){
+                m[i][i-1] = -scale;
+            }else{
+                s -= 1;
+            }
+
+            if(right < N){
+                m[i][i+1] = -scale;
+            }else {
+                s -= 1;
+            }
+
+            if(bottom >= 0){
+                m[i][bottom * N + c] = -scale;
+            }else {
+                s -= 1;
+            }
+
+            if(top < M){
+                m[i][top * N + c] = -scale;
+            }else {
+                s -= 1;
+            }
+
+            m[i][i] = s * scale + 1;
+        }
+    }
+    return m;
+}
+
+blas::SparseMatrix generatePoissonEquationMatrix(size_t N, float scale = 1) {
+    return generatePoissonEquationMatrix(N, N, scale);
+}

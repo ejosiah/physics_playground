@@ -10,7 +10,7 @@
 namespace lns {
 
     template<typename A, typename X, typename B>
-    size_t jacobi(const A& a, X& x, const B& b, double threshold) {
+    size_t jacobi(A& a, X& x, const B& b, double threshold) {
         const auto [cols, _] = a.size();
         const size_t rows = b.size();
         X xOld;
@@ -21,8 +21,14 @@ namespace lns {
             xOld = x;
             for(size_t i = 0; i < rows; i++){
                 decltype(t) sum{0};
-                for(size_t j = 0; j < cols; j++){
-                    sum += (i != j) * a[i][j] * xOld[j];
+                if constexpr (A::Layout == blas::VectorType::Sparse){
+                    for (auto [j, v] : a[i]){
+                        sum += (i != j) * v * xOld[j];
+                    }
+                }else{
+                    for(size_t j = 0; j < cols; j++){
+                        sum += (i != j) * a[i][j] * xOld[j];
+                    }
                 }
                 x[i] = 1.0/a[i][i] * (b[i] - sum);
             }
@@ -35,7 +41,7 @@ namespace lns {
     }
 
     template<typename A, typename X, typename B>
-    void jacobi(const A& a, X& x, const B b, size_t iterations) {
+    void jacobi(A& a, X& x, const B b, size_t iterations) {
         const auto [cols, _] = a.size();
         const size_t rows = b.size();
         X xOld;
@@ -44,8 +50,14 @@ namespace lns {
             xOld = x;
             for(size_t i = 0; i < rows; i++){
                 decltype(t) sum{0};
-                for(size_t j = 0; j < cols; j++){
-                    sum += (i != j) * a[i][j] * xOld[j];
+                if constexpr (A::Layout == blas::VectorType::Sparse){
+                    for (auto [j, v] : a[i]){
+                        sum += (i != j) * v * xOld[j];
+                    }
+                }else{
+                    for(size_t j = 0; j < cols; j++){
+                        sum += (i != j) * a[i][j] * xOld[j];
+                    }
                 }
                 x[i] = 1.0/a[i][i] * (b[i] - sum);
             }
@@ -53,7 +65,7 @@ namespace lns {
     }
 
     template<typename A, typename X, typename B>
-    void gauss_seidel(const A& a, X& x, const B b, size_t iterations) {
+    void gauss_seidel(A& a, X& x, const B b, size_t iterations) {
         const auto [cols, _] = a.size();
         const size_t rows = b.size();
         X xOld = x;
@@ -64,17 +76,25 @@ namespace lns {
                 decltype(t) sum{};
                 const auto aii = a[i][i];
                 x[i] = (b[i] / aii);
-                for(size_t j = 0; j < cols; j++){
-                    if( i == j) continue;
-                    x[i] = x[i] - (a[i][j] / aii) * xOld[j];
-                    xOld[i] = x[i];
+                if constexpr (A::Layout == blas::VectorType::Sparse){
+                    for(auto [j, v] : a[i]){
+                        if (i == j) continue;
+                        x[i] = x[i] - (v / aii) * xOld[j];
+                        xOld[i] = x[i];
+                    }
+                }else {
+                    for (size_t j = 0; j < cols; j++) {
+                        if (i == j) continue;
+                        x[i] = x[i] - (a[i][j] / aii) * xOld[j];
+                        xOld[i] = x[i];
+                    }
                 }
             }
         }
     }
 
     template<typename A, typename X, typename B>
-    size_t gauss_seidel(const A& a, X& x, const B b, double threshold) {
+    size_t gauss_seidel(A& a, X& x, const B b, double threshold) {
         const auto [cols, _] = a.size();
         const size_t rows = b.size();
         X xOld = x;
@@ -85,10 +105,18 @@ namespace lns {
             for(size_t i = 0; i < rows; i++){
                 const auto aii = a[i][i];
                 x[i] = (b[i] / aii);
-                for(size_t j = 0; j < cols; j++){
-                    if( i == j) continue;
-                    x[i] = x[i] - (a[i][j] / aii) * xOld[j];
-                    xOld[i] = x[i];
+                if constexpr (A::Layout == blas::VectorType::Sparse){
+                    for(auto [j, v] : a[i]){
+                        if (i == j) continue;
+                        x[i] = x[i] - (v / aii) * xOld[j];
+                        xOld[i] = x[i];
+                    }
+                }else {
+                    for (size_t j = 0; j < cols; j++) {
+                        if (i == j) continue;
+                        x[i] = x[i] - (a[i][j] / aii) * xOld[j];
+                        xOld[i] = x[i];
+                    }
                 }
                 auto err = x - ox;
                 sentinel = !std::any_of(err.begin(), err.end(), [tol=threshold](auto error){ return error > tol; });

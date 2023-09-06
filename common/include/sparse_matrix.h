@@ -106,7 +106,7 @@ namespace blas {
         }
 
     private:
-        std::vector<Rowtype> m_data{};
+        mutable std::vector<Rowtype> m_data{};
     };
 
     using SparseMatrix = SparseMatrixT<float>;
