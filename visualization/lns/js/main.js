@@ -6,6 +6,10 @@ const randomColor = () => {
     return `rgba(${r}, ${g}, ${b}, 0.2)`;
 }
 
+const deepCopy = source => {
+    return JSON.parse(JSON.stringify(source))
+}
+
 // const data_path = "./data/benchmarks_sparse_matrix.json"
 const data_path = "./data/benchmarks.json"
 
@@ -22,16 +26,16 @@ const createControl = (metadata, runs) => {
     }
 
     let dataSize = "";
-    for(let {size, $1, $2} of metadata) {
-        dataSize += `<span><input name="size" type="checkbox" value="${size}" checked \><label>${size}</label></span>`
+    for(let i = 0; i < metadata.length; i++) {
+        const size = metadata[i].size;
+        dataSize += `<span><input name="size" type="checkbox" value="${i}" checked \><label>${size}</label></span>`
     }
 
     const names = []
     const layouts = ['Dense', 'Sparse'];
-    let layoutContent = "";
-    for(const layout of layouts){
-        layoutContent += `<span><input name="layout" type="checkbox" value="${layout}" checked \><label>${layout}</label></span>`;
-    }
+    let layoutContent = `<span><input name="layout" type="checkbox" value="${layouts[0]}" checked \><label>${layouts[0]}</label></span>`;
+    layoutContent += `<span><input name="layout" type="checkbox" value="${layouts[1]}" checked \><label>${layouts[1]}</label></span>`;
+
 
     for(const benchmark of runs[0].benchmarks){
         let [$1, name, $2] = benchmark.name.split("/");
@@ -46,8 +50,9 @@ const createControl = (metadata, runs) => {
     }
 
     let solvers = "";
-    for(const name of names){
-        solvers += `<div><input name="solver" type="checkbox" value="${name}" checked \><label>${name}</label></div>`
+    for(let i = 0; i < names.length; i++){
+        const name = names[i];
+        solvers += `<div><input name="solver" type="checkbox" value="${i}" checked \><label>${name}</label></div>`
     }
 
 
@@ -72,53 +77,29 @@ const createControl = (metadata, runs) => {
 </form>`
 
     container.querySelector('form').addEventListener('change', e => {
-        const filter = [];
-        const controls = Array.from(container.querySelectorAll(`input[name=${e.target.name}]`));
-        controls.forEach(control => filter.push(!control.checked));
-        const options = { [e.target.name] : filter };
-        constructGraph(metadata, runs, options);
-    })
+        const controls = Array.from(container.querySelectorAll(`input[type=checkbox]`));
+
+        const staging = new Map();
+        for(const control of controls){
+            if(!staging.has(control.name)){
+                staging.set(control.name, []);
+            }
+            staging.get(control.name).push(!control.checked)
+            if(control.name === 'solver'){
+                staging.get(control.name).push(!control.checked)
+            }
+        }
+        const filter = {};
+        for(const [key, value] of staging){
+            filter[key] = value;
+        }
+        updateGraph(filter)
+    });
 
 }
 
-const constructGraph =  (metadata, history, options = {}) => {
+const createChart = data => {
     document.querySelector('.graph').innerHTML = '';
-    const data = [];
-    const hcolors = [];
-// const alldatasets = [];
-    for(let i = 0; i < history.length; i++){
-        const colors = [];
-        for(let j = 0; j < metadata.length; j++){
-            colors.push(randomColor());
-        }
-        hcolors.push(colors);
-    }
-
-    for(let { size, names, colors }  of metadata){
-        data.push({
-            labels: names,
-            datasets: []
-        });
-        for(let i = 0; i < history.length; i++){
-
-            data[data.length - 1].datasets.push(            {
-                label: `Linear system solvers ${size} run(${i})`,
-                data: [],
-                borderWidth: 1,
-                backgroundColor: hcolors[i]
-            })
-        }
-    }
-
-    for(let i = 0; i < history.length; i++) {
-
-        for (const benchmark of history[i].benchmarks) {
-            const [_, name, size] = benchmark.name.split("/");
-            const index = metadata.findIndex(e => e.size == size);
-            data[index].datasets[i].data.push(benchmark.real_time);
-        }
-    }
-
     for(const entry of data) {
         const div = document.createElement("div");
         div.innerHTML = "<canvas width='500' height='300'></canvas>"
@@ -136,6 +117,74 @@ const constructGraph =  (metadata, history, options = {}) => {
             }
         });
     }
+}
+const updateGraph = filter => {
+    if(!window.graph_data) return;
+
+    const data = deepCopy(window.graph_data).filter((_, index) => !filter.size[index] );
+
+    const layouts = ['Dense', 'Sparse'].filter((_, index) => filter.layout[index] );
+
+    for(const entry of data){
+        entry.datasets = entry.datasets.filter((_, index) => !filter.history[index] );
+
+        entry.labels = entry.labels.filter((_, index) => !filter.solver[index] );
+        for(const dataset of entry.datasets){
+            dataset.data = dataset.data.filter((_, index) => !filter.solver[index]);
+        }
+
+        const indexes = entry.labels.map( (label, index) => {
+            return !layouts.some(layout => label.includes(layout));
+        });
+
+        entry.labels = entry.labels.filter((_, index) => indexes[index]  );
+        for(const dataset of entry.datasets){
+            dataset.data = dataset.data.filter((_, index) => indexes[index] );
+        }
+
+    }
+    createChart(data);
+}
+
+
+const constructGraph =  (metadata, history) => {
+    const data = [];
+    const hcolors =  [];
+
+    for(let i = 0; i < history.length; i++){
+        const colors = [];
+        for (let j = 0; j < metadata.length; j++) {
+            colors.push(randomColor());
+        }
+        hcolors.push(colors);
+    }
+
+    for(let { size, names, colors }  of metadata){
+        data.push({
+            labels: names,
+            datasets: []
+        });
+        for(let i = 0; i < history.length; i++){
+            data[data.length - 1].datasets.push(            {
+                label: `Linear system solvers ${size} run(${i})`,
+                data: [],
+                borderWidth: 1,
+                backgroundColor: hcolors[i]
+            })
+        }
+    }
+
+    for(let i = 0; i < history.length; i++) {
+        for (const benchmark of history[i].benchmarks) {
+            const [_, name, size] = benchmark.name.split("/");
+            const index = metadata.findIndex(e => e.size == size);
+            data[index].datasets[i].data.push(benchmark.real_time);
+        }
+    }
+
+    createChart(data);
+
+    window.graph_data = data;
 }
 
 
@@ -176,4 +225,5 @@ const metadata = extractMetaData(benchmarks);
 
 createControl(metadata, history);
 constructGraph(metadata, history);
+
 
