@@ -33,7 +33,8 @@
         }
       ],
       "load_avg": [],
-      "library_build_type": "release"
+      "library_build_type": "release",
+      "name" : "Linear system solvers"
     },
     "benchmarks": [
       {

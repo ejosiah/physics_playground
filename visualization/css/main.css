@@ -1,0 +1,28 @@
+body {
+    font-family: Inter, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+    color: #5C5C5C;
+}
+main.content {
+    max-width: 1500px;
+    margin-inline: auto;
+    text-align: center;
+}
+
+.wrapper {
+    display: grid;
+    grid-template-columns : 1fr 3fr;
+    gap: 10px;
+}
+
+
+form {
+    text-align: left;
+}
+
+form fieldset {
+    border: 1px solid #CECECE;
+}
+
+form fieldset legend {
+    font-weight: bold;
+}

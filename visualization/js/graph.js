@@ -10,20 +10,17 @@ const deepCopy = source => {
     return JSON.parse(JSON.stringify(source))
 }
 
-// const data_path = "./data/benchmarks_sparse_matrix.json"
-const data_path = "./data/benchmarks.json"
-
-const response = await fetch(data_path);
-const history = await response.json();
-const benchmarks = history[0].benchmarks;
-
-const createControl = (metadata, runs) => {
+const createControl = (metadata, runs, options = {}) => {
     const container = document.querySelector(".controls main");
+    const extraControls = options.extraControls || [];
+    const rename = options.rename || (it => it);
+    const update = options.update || (() => {})
 
     let history = "";
     for(let i = 0; i < runs.length; i++) {
         history += `<span><input name="history" type="checkbox" value="${i}" checked \><label>${i}</label></span>`
     }
+
 
     let dataSize = "";
     for(let i = 0; i < metadata.length; i++) {
@@ -31,23 +28,16 @@ const createControl = (metadata, runs) => {
         dataSize += `<span><input name="size" type="checkbox" value="${i}" checked \><label>${size}</label></span>`
     }
 
-    const names = []
-    const layouts = ['Dense', 'Sparse'];
-    let layoutContent = `<span><input name="layout" type="checkbox" value="${layouts[0]}" checked \><label>${layouts[0]}</label></span>`;
-    layoutContent += `<span><input name="layout" type="checkbox" value="${layouts[1]}" checked \><label>${layouts[1]}</label></span>`;
-
-
+    let names = []
     for(const benchmark of runs[0].benchmarks){
         let [$1, name, $2] = benchmark.name.split("/");
 
-        for(const layout of layouts){
-            const length = name.indexOf(layout);
-            name = length !== -1 ? name.substring(0, length) : name;
-        }
         if(!names.find(it => it === name)){
             names.push(name)
         }
     }
+
+    names = rename(names);
 
     let solvers = "";
     for(let i = 0; i < names.length; i++){
@@ -55,26 +45,22 @@ const createControl = (metadata, runs) => {
         solvers += `<div><input name="solver" type="checkbox" value="${i}" checked \><label>${name}</label></div>`
     }
 
+    const components = [{ history }, { dataSize }, {solvers}];
 
-    container.innerHTML  =
-`<form>
-    <fieldset>
-        <legend>history</legend>
-        ${history}
-    </fieldset>
-    <fieldset>
-        <legend>data size</legend>
-        ${dataSize}
-    </fieldset>
-    <fieldset>
-        <legend>layout</legend>
-        ${layoutContent}
-    </fieldset>
-    <fieldset>
-        <legend>solvers</legend>
-        ${solvers}
-    </fieldset>
-</form>`
+    if(extraControls.length > 0){
+        for(const {position, component} of extraControls){
+            components.splice(position, 0, component);
+        }
+    }
+
+    const content =
+        components.map( entry => {
+            const [[name, content]] = Object.entries(entry);
+            return `<fieldset><legend>${name}</legend>${content}</fieldset>`
+        }).join("\n");
+
+    container.innerHTML  = `<form>${content}</form>`
+
 
     container.querySelector('form').addEventListener('change', e => {
         const controls = Array.from(container.querySelectorAll(`input[type=checkbox]`));
@@ -93,7 +79,7 @@ const createControl = (metadata, runs) => {
         for(const [key, value] of staging){
             filter[key] = value;
         }
-        updateGraph(filter)
+        updateGraph(filter, update)
     });
 
 }
@@ -118,12 +104,10 @@ const createChart = data => {
         });
     }
 }
-const updateGraph = filter => {
+const updateGraph = (filter, update) => {
     if(!window.graph_data) return;
 
     const data = deepCopy(window.graph_data).filter((_, index) => !filter.size[index] );
-
-    const layouts = ['Dense', 'Sparse'].filter((_, index) => filter.layout[index] );
 
     for(const entry of data){
         entry.datasets = entry.datasets.filter((_, index) => !filter.history[index] );
@@ -133,27 +117,22 @@ const updateGraph = filter => {
             dataset.data = dataset.data.filter((_, index) => !filter.solver[index]);
         }
 
-        const indexes = entry.labels.map( (label, index) => {
-            return !layouts.some(layout => label.includes(layout));
-        });
-
-        entry.labels = entry.labels.filter((_, index) => indexes[index]  );
-        for(const dataset of entry.datasets){
-            dataset.data = dataset.data.filter((_, index) => indexes[index] );
-        }
+        update(entry, filter);
 
     }
     createChart(data);
 }
 
 
-const constructGraph =  (metadata, history) => {
+const constructGraph =  (metadata, history, options) => {
     const data = [];
     const hcolors =  [];
 
+
     for(let i = 0; i < history.length; i++){
         const colors = [];
-        for (let j = 0; j < metadata.length; j++) {
+        const numBenchmarks = metadata[0].names.length;
+        for (let j = 0; j < numBenchmarks; j++) {
             colors.push(randomColor());
         }
         hcolors.push(colors);
@@ -166,7 +145,7 @@ const constructGraph =  (metadata, history) => {
         });
         for(let i = 0; i < history.length; i++){
             data[data.length - 1].datasets.push(            {
-                label: `Linear system solvers ${size} run(${i})`,
+                label: `${options.name} ${size} run(${i})`,
                 data: [],
                 borderWidth: 1,
                 backgroundColor: hcolors[i]
@@ -221,9 +200,14 @@ const extractMetaData = benchmarks => {
     return metadata;
 }
 
-const metadata = extractMetaData(benchmarks);
+const createGraph = async (data_path, options) => {
+    const response = await fetch(data_path);
+    const history = await response.json();
 
-createControl(metadata, history);
-constructGraph(metadata, history);
+    const metadata = extractMetaData(history[0].benchmarks);
 
+    createControl(metadata, history, options);
+    constructGraph(metadata, history, options);
+}
 
+export default createGraph;
