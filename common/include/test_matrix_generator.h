@@ -3,7 +3,7 @@
 #include "matrix.h"
 #include <iostream>
 
-blas::SparseMatrix generateMatrix(size_t size, float c = 1) {
+inline blas::SparseMatrix generateMatrix(size_t size, float c = 1) {
      blas::SparseMatrix sm(size);
 
     sm[0][0] = 2 * c + 1;
@@ -28,7 +28,7 @@ blas::SparseMatrix generateMatrix(size_t size, float c = 1) {
  * @param scale - scaling factor
  * @return
  */
-blas::SparseMatrix generatePoissonEquationMatrix(size_t M, size_t N, float scale = 1) {
+inline blas::SparseMatrix generatePoissonEquationMatrix(size_t M, size_t N, float scale = 1) {
     blas::SparseMatrix m(M * N);
 
     for(int r = 0; r < M; r++){
@@ -70,6 +70,6 @@ blas::SparseMatrix generatePoissonEquationMatrix(size_t M, size_t N, float scale
     return m;
 }
 
-blas::SparseMatrix generatePoissonEquationMatrix(size_t N, float scale = 1) {
+inline blas::SparseMatrix generatePoissonEquationMatrix(size_t N, float scale = 1) {
     return generatePoissonEquationMatrix(N, N, scale);
 }

@@ -17,6 +17,7 @@ openexr/2.5.5
 taskflow/3.4.0
 zlib/1.2.13
 yaml-cpp/0.7.0
+daw_json_link/3.19.0
 
 [generators]
 cmake

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Linear System Solvers</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="css/main.css" />
+
+</head>
+<body>
+<main class="content">
+    <h1>Linear systems solver Convergence</h1>
+    <div class="wrapper">
+        <div class="controls">
+            <header><h2>Controls</h2></header>
+            <main>
+                <form>
+                    <fieldset>
+                        <legend>fields</legend>
+                        <div><input type="radio" name="field" value="error" checked /><label>error</label></div>
+                        <div><input type="radio" name="field" value="time" data-scale="1e-6" /><label>time</label></div>
+                        <div><input type="radio" name="field" value="iterationsUsed" /><label>iterationsUsed</label></div>
+                    </fieldset>
+                </form>
+            </main>
+        </div>
+        <div class="graph">
+        </div>
+    </div>
+</main>
+</body>
+<script type="module">
+    import "./js/convergence.js"
+</script>
+</html>

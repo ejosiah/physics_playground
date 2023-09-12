@@ -197,11 +197,11 @@ BENCHMARK_DEFINE_F(LinearSystemsFixture, conjugateGradientSparseMatrix)(benchmar
 }
 
 
-//BENCHMARK_REGISTER_F(LinearSystemsFixture, jacobiSolverDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-//BENCHMARK_REGISTER_F(LinearSystemsFixture, jacobiSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<4);
-//BENCHMARK_REGISTER_F(LinearSystemsFixture, gaussSeidelDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-//BENCHMARK_REGISTER_F(LinearSystemsFixture, gaussSeidelSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<4);
-//BENCHMARK_REGISTER_F(LinearSystemsFixture, gradientDesentDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-BENCHMARK_REGISTER_F(LinearSystemsFixture, gradientDesentSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<4);
-//BENCHMARK_REGISTER_F(LinearSystemsFixture, conjugateGradientDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
-//BENCHMARK_REGISTER_F(LinearSystemsFixture, conjugateGradientSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<4);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, jacobiSolverDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, jacobiSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, gaussSeidelDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, gaussSeidelSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, gradientDesentDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, gradientDesentSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, conjugateGradientDenseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);
+BENCHMARK_REGISTER_F(LinearSystemsFixture, conjugateGradientSparseMatrix)->RangeMultiplier(2)->Range(32, 32<<3);

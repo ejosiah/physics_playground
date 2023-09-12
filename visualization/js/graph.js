@@ -1,13 +1,22 @@
-const randomColor = () => {
-    const r = Math.random() * 255;
-    const g = Math.random() * 255;
-    const b = Math.random() * 255;
+import {randomColor, deepCopy} from "./util.js"
+const extractPredicates = container => {
+    const controls = Array.from(container.querySelectorAll(`input[type=checkbox]`));
 
-    return `rgba(${r}, ${g}, ${b}, 0.2)`;
-}
-
-const deepCopy = source => {
-    return JSON.parse(JSON.stringify(source))
+    const staging = new Map();
+    for(const control of controls){
+        if(!staging.has(control.name)){
+            staging.set(control.name, []);
+        }
+        staging.get(control.name).push(!control.checked)
+        if(control.name === 'solver'){
+            staging.get(control.name).push(!control.checked)
+        }
+    }
+    const predicates = {};
+    for(const [key, value] of staging){
+        predicates[key] = value;
+    }
+    return predicates;
 }
 
 const createControl = (metadata, runs, options = {}) => {
@@ -15,6 +24,7 @@ const createControl = (metadata, runs, options = {}) => {
     const extraControls = options.extraControls || [];
     const rename = options.rename || (it => it);
     const update = options.update || (() => {})
+    const extraFields = options.fields || [];
 
     let history = "";
     for(let i = 0; i < runs.length; i++) {
@@ -45,7 +55,14 @@ const createControl = (metadata, runs, options = {}) => {
         solvers += `<div><input name="solver" type="checkbox" value="${i}" checked \><label>${name}</label></div>`
     }
 
-    const components = [{ history }, { dataSize }, {solvers}];
+    let fields =
+        `<div>
+            <input type="radio" name="field" value="real_time"><label>real time</label>
+            <input type="radio" name="field" value="cpu_time" checked="checked"><label>cpu time</label>
+            ${extraFields.map( ({ display, name }) => `<input type="radio" name="field" value="${name}" ><label>${display}</label>`)}
+        </div>`
+
+    const components = [{ history }, { dataSize }, {solvers}, {fields} ];
 
     if(extraControls.length > 0){
         for(const {position, component} of extraControls){
@@ -63,25 +80,15 @@ const createControl = (metadata, runs, options = {}) => {
 
 
     container.querySelector('form').addEventListener('change', e => {
-        const controls = Array.from(container.querySelectorAll(`input[type=checkbox]`));
+        const selectedField = container.querySelector('input[type=radio]:checked')?.value;
+        if(selectedField && selectedField !== window.previous_field){
+            const { metadata, history, options } = window.createGraphArgs;
+            constructGraph(metadata, history, options, selectedField);
+        }
 
-        const staging = new Map();
-        for(const control of controls){
-            if(!staging.has(control.name)){
-                staging.set(control.name, []);
-            }
-            staging.get(control.name).push(!control.checked)
-            if(control.name === 'solver'){
-                staging.get(control.name).push(!control.checked)
-            }
-        }
-        const filter = {};
-        for(const [key, value] of staging){
-            filter[key] = value;
-        }
-        updateGraph(filter, update)
+        const predicate = extractPredicates(container);
+        updateGraph(predicate, update)
     });
-
 }
 
 const createChart = data => {
@@ -104,27 +111,30 @@ const createChart = data => {
         });
     }
 }
-const updateGraph = (filter, update) => {
-    if(!window.graph_data) return;
 
-    const data = deepCopy(window.graph_data).filter((_, index) => !filter.size[index] );
+const filter = (data, predicates, interceptor) => {
+    data = data.filter((_, index) => !predicates.size[index] );
+    for(const entry of data) {
+        entry.datasets = entry.datasets.filter((_, index) => !predicates.history[index] );
 
-    for(const entry of data){
-        entry.datasets = entry.datasets.filter((_, index) => !filter.history[index] );
-
-        entry.labels = entry.labels.filter((_, index) => !filter.solver[index] );
+        entry.labels = entry.labels.filter((_, index) => !predicates.solver[index] );
         for(const dataset of entry.datasets){
-            dataset.data = dataset.data.filter((_, index) => !filter.solver[index]);
+            dataset.data = dataset.data.filter((_, index) => !predicates.solver[index]);
         }
 
-        update(entry, filter);
-
+        interceptor(entry, predicates);
     }
+    return data;
+}
+const updateGraph = (predicates, interceptor) => {
+    if(!window.graph_data) return;
+
+    const data = filter(deepCopy(window.graph_data), predicates, interceptor);
     createChart(data);
 }
 
 
-const constructGraph =  (metadata, history, options) => {
+const constructGraph =  (metadata, history, options, field = "cpu_time") => {
     const data = [];
     const hcolors =  [];
 
@@ -157,13 +167,14 @@ const constructGraph =  (metadata, history, options) => {
         for (const benchmark of history[i].benchmarks) {
             const [_, name, size] = benchmark.name.split("/");
             const index = metadata.findIndex(e => e.size == size);
-            data[index].datasets[i].data.push(benchmark.real_time);
+            data[index].datasets[i].data.push(benchmark[field]);
         }
     }
 
     createChart(data);
 
     window.graph_data = data;
+    window.previous_field = field;
 }
 
 
@@ -205,6 +216,7 @@ const createGraph = async (data_path, options) => {
     const history = await response.json();
 
     const metadata = extractMetaData(history[0].benchmarks);
+    window.createGraphArgs = { metadata, history, options };
 
     createControl(metadata, history, options);
     constructGraph(metadata, history, options);

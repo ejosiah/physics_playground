@@ -13,8 +13,9 @@ namespace blas {
         using Size = std::tuple<size_t, size_t>;
         using RowType = VectorT<T>;
         using Coltype = VectorT<T>;
-        static constexpr VectorType Layout = VectorType::Dense;
     public:
+        static constexpr VectorType Layout = VectorType::Dense;
+
         MatrixT(size_t size) : MatrixT(size, size) {}
 
         MatrixT(size_t rows, size_t columns)

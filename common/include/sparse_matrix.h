@@ -13,8 +13,9 @@ namespace blas {
     class SparseMatrixT {
         using Size = std::tuple<size_t, size_t>;
         using Rowtype = SparseVectorT<T>;
-        static constexpr VectorType Layout = VectorType::Sparse;
     public:
+        static constexpr VectorType Layout = VectorType::Sparse;
+
         SparseMatrixT(size_t size) : m_data(size) {}
 
         SparseMatrixT(size_t rows, size_t cols) : m_data(rows) {}

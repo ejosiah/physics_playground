@@ -187,7 +187,7 @@ namespace lns {
                 r = r - alpha * q;
             }
 
-            auto s = r;
+            auto& s = r;
             rd0 = rd;
             rd = r.dot(s);
             auto beta = rd/rd0;

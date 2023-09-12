@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <algorithm>
+#include <numeric>
 
 namespace chrono = std::chrono;
 
@@ -24,6 +25,6 @@ inline Average profile(Setup&& setup, Body&& body, size_t runs) {
         runtimes[i] = runtime.count();
     }
 
-    auto sum = std::accumulate(runtimes.begin(), runtimes.end(), 0);
+    auto sum = std::accumulate(runtimes.begin(), runtimes.end(), TimeUnit{});
     return static_cast<Average>(sum)/static_cast<Average>(runs);
 }

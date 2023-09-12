@@ -14,6 +14,9 @@ main.content {
     gap: 10px;
 }
 
+.graph > div {
+    margin-bottom: 2em;
+}
 
 form {
     text-align: left;

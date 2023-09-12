@@ -24,6 +24,7 @@ await createGraph("./data/linear_solvers_benchmarks.json"
                 name : "Linear system solvers",
                 rename,
                 extraControls : [{position: 2, component : { layout : layoutContent}}],
+                fields : [{display: "iterations", name : "lns_iterations"}],
                 update: (data, filter) => {
                     const alayout = layouts.filter((_, index) => filter.layout[index] );
 

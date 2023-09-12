@@ -151,7 +151,8 @@ namespace blas {
             assert(size() == v1.size());
             T result{};
             const auto &v0 = *this;
-            for (int i = 0; i < size(); i++) {
+            const auto N = size();
+            for (int i = 0; i < N; i++) {
                 result += v0[i] * v1[i];
             }
             return result;
@@ -185,9 +186,8 @@ namespace blas {
         SparseVectorT() = default;
 
         SparseVectorT(std::initializer_list<EntryT> list) {
-            for (auto [id, value]: list) {
-                m_data[id] = value;
-            }
+            m_data.resize(list.size());
+            std::copy(list.begin(), list.end(), m_data.begin());
         }
 
         template<typename U>
@@ -196,43 +196,53 @@ namespace blas {
             for (int i = 0; i < source.size(); i++) {
                 auto v = source[i];
                 if (v != zero) {
-                    m_data[i] = v;
+                    m_data.push_back({i, v});
                 }
             }
         }
 
         SparseVectorT(const SparseVectorT &source) noexcept {
-            for (auto [i, v]: source.m_data) {
-                m_data[i] = v;
-            }
+            m_data.resize(source.m_data.size());
+            std::copy(source.m_data.cbegin(), source.m_data.cend(), m_data.begin());
         }
 
         SparseVectorT &operator=(const SparseVectorT &source) noexcept {
             if (this != &source) {
-                for (auto [i, v]: source.m_data) {
-                    m_data[i] = v;
-                }
+                m_data.resize(source.m_data.size());
+                std::copy(source.m_data.cbegin(), source.m_data.cend(), m_data.begin());
             }
             return *this;
         }
 
         const T &operator[](int index) const {
-            if (m_data.contains(index)) {
-                return m_data.at(index);
-            }
+            auto itr = std::find_if(m_data.begin(), m_data.end(), [index](const auto& entry){
+                return entry.id == index;
+            });
             static const T zero{};
-            return zero;
+            return itr == m_data.end() ? zero : itr->value;
         }
 
         T &operator[](int index)  {
-            if (!m_data.contains(index)) {
-                m_data[index] = 0;
+            auto itr = std::find_if(m_data.begin(), m_data.end(), [index](const auto& entry){
+                return entry.id == index;
+            });
+            if(itr == m_data.end()) {
+                m_data.push_back({index, 0});
+                return m_data[m_data.size() - 1].value;
             }
-           return m_data[index];
+            return itr-> value;
+
         }
 
-        void set(EntryT entry) {
-            m_data[entry.id] = entry.value;
+        void set(EntryT oEntry) {
+            auto itr = std::find_if(m_data.begin(), m_data.end(), [oEntry](const auto& entry){
+                return entry.id == oEntry.id;
+            });
+            if(itr != m_data.end()){
+                itr->value = oEntry.value;
+            }else{
+                m_data.push_back(oEntry);
+            }
         }
 
         template<typename U>
@@ -242,8 +252,8 @@ namespace blas {
 
         template<typename U>
         friend VectorT<U> operator+(const SparseVectorT<U> &v0, const VectorT<U> v1) {
-            VectorT<U> result(v0.size());
-            for (auto [i, v]: v0) {
+            VectorT<U> result(v1.size());
+            for (auto [i, v]: v0.m_data) {
                 result[i] = v + v1[i];
             }
 
@@ -252,8 +262,8 @@ namespace blas {
 
         template<typename U>
         friend VectorT<U> operator-(const SparseVectorT<U> &v0, const VectorT<U> v1) {
-            VectorT<U> result(v0.size());
-            for (auto [i, v]: v0) {
+            VectorT<U> result(v1.size());
+            for (auto [i, v]: v0.m_data) {
                 result[i] = v - v1[i];
             }
 
@@ -277,8 +287,8 @@ namespace blas {
 
         template<typename U>
         friend VectorT<U> operator*(const SparseVectorT<U> &v0, const VectorT<U> v1) {
-            VectorT<U> result(v0.size());
-            for (auto [i, v]: v0) {
+            VectorT<U> result(v1.size());
+            for (auto [i, v]: v0.m_data) {
                 result[i] = v * v1[i];
             }
 
@@ -302,7 +312,7 @@ namespace blas {
         T dot(const VectorT<T> &v1) const {
             const auto &v0 = *this;
             T result{};
-            for (const auto [i, v]: v0.m_data) {
+            for (const auto [i, v] : v0.m_data) {
                 result += v * v1[i];
             }
             return result;
@@ -338,7 +348,7 @@ namespace blas {
         }
 
     private:
-        std::unordered_map<int, T> m_data{};
+        std::vector<EntryT> m_data{};
     };
 
     template<typename T>
