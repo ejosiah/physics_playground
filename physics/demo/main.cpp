@@ -39,8 +39,8 @@ int main(int, char**){
             std::make_unique<VolumeEmitter2D<SeparateFieldMemoryLayout>>(std::move(sdf), std::move(pointGenerator), shrink(bounds, radius * .5f), radius * 2);
 
     Emitters<SeparateFieldMemoryLayout> emitters{};
-//    emitters.push_back(std::move(builder.makeUnique()));
-    emitters.push_back(std::move(vemitter));
+    emitters.push_back(std::move(builder.makeUnique()));
+//    emitters.push_back(std::move(vemitter));
 
 //    builder
 //        .withOrigin({bounds.upper.x - radius * 2, bounds.upper.y - 2 * radius})

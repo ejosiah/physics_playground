@@ -121,7 +121,7 @@ private:
         VulkanDescriptorSetLayout setLayout;
         VkDescriptorSet descriptorSet;
     } m_render;
-    int m_numIterations{16};
+    int m_numIterations{8};
     std::array<double, 100> execTime{};
 
 

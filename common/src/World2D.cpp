@@ -365,7 +365,7 @@ void World2D<Layout>::createParticles() {
     for(auto& emitter : emitters) emitter->set(particles.handle);
     colorParticles();
 //    loadParticles();
-    solver = std::make_unique<BasicSolver<Layout>>(particles.handle, m_bounds, m_radius, m_numIterations);
+    solver = std::make_unique<VarletIntegrationSolver<Layout>>(particles.handle, m_bounds, m_radius, m_numIterations);
 
 
 }

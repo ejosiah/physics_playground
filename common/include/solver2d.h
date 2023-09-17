@@ -187,6 +187,7 @@ void VarletIntegrationSolver<Layout>::integrate(float dt) {
 
     auto position = this->m_particles->position();
     auto prevPosition = this->m_particles->previousPosition();
+    auto velocity = this->m_particles->velocity();
 
 #pragma loop(hint_parallel(8))
     for(int i = 0; i < N; i++){
@@ -195,6 +196,7 @@ void VarletIntegrationSolver<Layout>::integrate(float dt) {
         auto p2 = 2.f * p1 - p0 + G * dt * dt;
         position[i] = p2;
         prevPosition[i] = p1;
+        velocity[i] = (p2 - p1)/dt;
     }
 }
 

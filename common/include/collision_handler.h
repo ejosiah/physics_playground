@@ -83,7 +83,7 @@ public:
 
     CollisionHandler(std::shared_ptr<Particle2D<Layout>> particles
             , Bounds2D worldBounds
-            , float maxRadius);
+            , float maxRadius, bool verlet = false);
 
     void resolveCollision();
 
@@ -106,8 +106,7 @@ private:
     std::barrier<> m_syncPoint{0};
     std::latch m_startLatch{0};
     std::vector<std::thread> workers;
-    std::atomic_bool m_startCollisionProcessing{false};
-    std::vector<std::atomic_bool> m_collisionProcessingDone;
+    bool m_verlet{false};
 };
 
 template<template<typename> typename Layout>
@@ -125,55 +124,21 @@ std::thread CollisionHandler<Layout>::worker(int id, int numWorkers) {
         bounds.lower.x += to<float>(id) * sizeX * ratio;
 
         spdlog::info("worker({}) working on bounds({}, {})", id, bounds.lower, bounds.upper);
-
-        while(true){
-//            m_syncPoint.arrive_and_wait();
-            if(!m_startCollisionProcessing) continue;
-            const auto numParticles = m_particles->size();
-
-            auto vPositions = m_particles->position();
-
-            for(int i = 0; i < numParticles; i++){
-                auto& position = vPositions[i];
-
-                if(!contains(bounds, position)){
-                    continue;
-                }
-
-                auto ids = grid.query(position, glm::vec2(gridSpacing));
-
-                int collisions = 0;
-                for(int j : ids){
-                    if(i == j) continue;
-                    collisions += resolveCollision(i, j);
-                }
-                collisionStats.average[collisionStats.next++] = collisions;
-                collisionStats.max = glm::max(collisionStats.max, collisions);
-                collisionStats.min = glm::min(collisionStats.min, collisions);
-
-                collisionStats.next %= collisionStats.average.size();
-                collisionStats.total += collisions;
-            }
-
-            for(auto i = 0; i < numParticles; i++){
-                boundsCheck(*m_particles, m_worldBounds, i);
-            }
-//            m_syncPoint.arrive_and_wait();
-            m_collisionProcessingDone[id] = true;
-        }
     });
 }
 
 template<template<typename> typename Layout>
 CollisionHandler<Layout>::CollisionHandler(std::shared_ptr<Particle2D<Layout>>  particles
         , Bounds2D worldBounds
-        , float maxRadius)
+        , float maxRadius
+        , bool verlet)
         : m_particles{ particles }
         , m_worldBounds{ worldBounds }
         , m_maxRadius{ maxRadius }
         , m_syncPoint{ numThreads + 1 }
         , m_startLatch{ numThreads }
         ,  m_contacts( particles->capacity())
+        , m_verlet(verlet)
 {
 //    grid = SpacialHashGrid2D{m_maxRadius * 2, to<int32_t>(particles->capacity()) };
     glm::ivec2 gridSize = worldBounds.upper - worldBounds.lower;
@@ -182,30 +147,6 @@ CollisionHandler<Layout>::CollisionHandler(std::shared_ptr<Particle2D<Layout>>  
 
 template<template<typename> typename Layout>
 void CollisionHandler<Layout>::resolveCollision() {
-//    static bool firstCall = true;
-//    if(firstCall){
-//        m_collisionProcessingDone = std::vector<std::atomic_bool>(numThreads);
-//        for(auto i = 0; i < numThreads; i++){
-//            auto thread = worker(i, numThreads);
-//            workers.push_back(std::move(thread));
-//        }
-//        m_startLatch.count_down(numThreads);
-//        firstCall = false;
-//    }
-//
-//    const auto numParticles = m_particles->size();
-//    grid.initialize(*m_particles, numParticles);
-//    m_startCollisionProcessing = true;
-//
-//    auto done = false;
-//    do {
-//        for(auto& cDone : m_collisionProcessingDone){
-//            done |= cDone.load();
-//        }
-//    }while(!done);
-//    for(auto& cDone : m_collisionProcessingDone){
-//        cDone.store(false);
-//    }
     const auto numParticles = m_particles->size();
     grid.initialize(*m_particles, numParticles);
 
@@ -214,7 +155,7 @@ void CollisionHandler<Layout>::resolveCollision() {
     for(int i = 0; i < numParticles; i++){
         auto& position = vPositions[i];
 
-        auto ids = grid.query(position, glm::vec2(m_maxRadius));
+        auto ids = grid.query(position, glm::vec2(m_maxRadius * 2));
 
         int collisions = 0;
         for(int j : ids){
@@ -277,6 +218,7 @@ int CollisionHandler<Layout>::resolveCollision(int ia, int ib) {
     auto& pa = position[ia];
     auto& pb = position[ib];
     glm::vec2 dir = pb - pa;
+    auto n = dir;
     auto rr = radius[ia] + radius[ib];
     rr *= rr;
     auto dd = glm::dot(dir, dir);
@@ -285,25 +227,31 @@ int CollisionHandler<Layout>::resolveCollision(int ia, int ib) {
     auto d = glm::sqrt(dd);
     dir /= d;
 
-    auto corr = (radius[ib] + radius[ia] - d) * .5f;
-    pa -= dir * corr;
-    pb += dir * corr;
-
-    auto v1 = glm::dot(velocity[ia], dir);
-    auto v2 = glm::dot(velocity[ib], dir);
-    auto vs = dot(velocity[ib] - velocity[ia], dir);
-
-    auto m1 = 1/inverseMass[ia];
-    auto m2 = 1/inverseMass[ib];
-
     auto rest = (restitution[ia] + restitution[ib]) * 0.5f;
-//    auto cvs = (v1 - v2) * rest;
-    auto cvs = -vs * rest;
-    auto newV1 = (m1 * v1 + m2 * v2 - m2 * -cvs) / (m1 + m2);
-    auto newV2 = (m1 * v1 + m2 * v2 - m1 * cvs) / (m1 + m2);
+    if(m_verlet){
+        auto corr = rest * (radius[ib] + radius[ia] - d) * .5f;
+        auto vel = (n / d) * corr;
+        pa -= vel;
+        pb += vel;
+    }else {
+        auto corr = (radius[ib] + radius[ia] - d) * .5f;
+        pa -= dir * corr;
+        pb += dir * corr;
 
-    velocity[ia] += dir * (newV1 - v1);
-    velocity[ib] += dir * (newV2 - v2);
+        auto v1 = glm::dot(velocity[ia], dir);
+        auto v2 = glm::dot(velocity[ib], dir);
+        auto vs = dot(velocity[ib] - velocity[ia], dir);
+
+        auto m1 = 1 / inverseMass[ia];
+        auto m2 = 1 / inverseMass[ib];
+
+        auto cvs = -vs * rest;
+        auto newV1 = (m1 * v1 + m2 * v2 - m2 * -cvs) / (m1 + m2);
+        auto newV2 = (m1 * v1 + m2 * v2 - m1 * cvs) / (m1 + m2);
+
+        velocity[ia] += dir * (newV1 - v1);
+        velocity[ib] += dir * (newV2 - v2);
+    }
     boundsCheck(*m_particles, m_worldBounds, ia);
     boundsCheck(*m_particles, m_worldBounds, ib);
 
