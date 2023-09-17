@@ -235,6 +235,7 @@ namespace blas {
         }
 
         void set(EntryT oEntry) {
+            if(oEntry.value == 0) return;
             auto itr = std::find_if(m_data.begin(), m_data.end(), [oEntry](const auto& entry){
                 return entry.id == oEntry.id;
             });
@@ -243,6 +244,14 @@ namespace blas {
             }else{
                 m_data.push_back(oEntry);
             }
+        }
+
+        [[nodiscard]]
+        bool contains(int index) const {
+            auto itr = std::find_if(m_data.begin(), m_data.end(), [index](const auto& entry){
+                return entry.id == index;
+            });
+            return itr != m_data.end();
         }
 
         template<typename U>
@@ -255,6 +264,42 @@ namespace blas {
             VectorT<U> result(v1.size());
             for (auto [i, v]: v0.m_data) {
                 result[i] = v + v1[i];
+            }
+
+            return result;
+        }
+
+        template<typename U>
+        friend SparseVectorT<U> operator+(const SparseVectorT<U> &sv0, const SparseVectorT<U> sv1) {
+            SparseVectorT<U> result(std::max(sv0.m_data.size(), sv1.m_data.size()));
+            for (auto [i, v]: sv0.m_data) {
+               result.set({i, v});
+            }
+
+            for(auto [i, v] : sv1.m_data){
+                if(result.contains(i)){
+                    result[i] += v;
+                }else {
+                    result.set({i, v});
+                }
+            }
+
+            return result;
+        }
+
+        template<typename U>
+        friend SparseVectorT<U> operator-(const SparseVectorT<U> &sv0, const SparseVectorT<U> sv1) {
+            SparseVectorT<U> result(std::max(sv0.m_data.size(), sv1.m_data.size()));
+            for (auto [i, v]: sv0.m_data) {
+               result.set({i, v});
+            }
+
+            for(auto [i, v] : sv1.m_data){
+                if(result.contains(i)){
+                    result[i] -= v;
+                }else {
+                    result.set({i, -v});
+                }
             }
 
             return result;

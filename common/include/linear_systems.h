@@ -6,6 +6,7 @@
 #include <iostream>
 #include <format>
 #include <chrono>
+#include "preconditioner.h"
 
 namespace lns {
 
@@ -160,6 +161,26 @@ namespace lns {
         }
     };
 
+    struct ichoPreconditioner {
+
+        template<typename Matrix>
+        Matrix operator()(const Matrix& matrix) const {
+            auto M =  precondition(matrix);
+            return lowerTriangularInvert(M);
+        }
+    };
+
+    struct SMPreconditioner {
+        ichoPreconditioner delegate{};
+
+        blas::SparseMatrix operator()(const blas::SparseMatrix& SM) const {
+            blas::Matrix M = SM;
+            M = delegate(M);
+            return blas::SparseMatrix(M);
+        }
+
+    };
+
     template<
         typename A,
         typename X,
@@ -170,7 +191,7 @@ namespace lns {
         auto invM = preconditioner(a);
         auto xi = x;
         auto r = b - a * xi;
-        auto d = r;
+        auto d = invM * r;
         auto rd = r.dot(d);
         auto rd0 = rd;
         auto epsilon = threshold * threshold * rd0;
@@ -187,7 +208,7 @@ namespace lns {
                 r = r - alpha * q;
             }
 
-            auto& s = r;
+            auto s = invM * r;
             rd0 = rd;
             rd = r.dot(s);
             auto beta = rd/rd0;

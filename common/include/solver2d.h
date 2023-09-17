@@ -36,12 +36,16 @@ public:
 
     virtual void postSolve(float dt) {}
 
-    virtual void integrate(float dt) = 0;
+    virtual void integrate(float dt) {};
 
-    void resolveCollision();
+    virtual void resolveCollision();
 
     CollisionHandler<Layout>::CollisionStats& collisionStats() {
         return m_collisionHandler.collisionStats;
+    }
+
+    CollisionHandler<Layout>& collisionHandler() {
+        return m_collisionHandler;
     }
 
     inline void gravity(glm::vec2 value) {
@@ -60,6 +64,17 @@ protected:
 
 
 template<template<typename> typename Layout>
+class VoidSolver : public Solver2D<Layout> {
+public:
+    VoidSolver() = default;
+    ~VoidSolver() override = default;
+
+    void solve(float dt) override {
+        // DO Nothing
+    }
+};
+
+template<template<typename> typename Layout>
 class BasicSolver : public Solver2D<Layout> {
 public:
     BasicSolver() = default;
@@ -72,6 +87,10 @@ public:
             , int iterations = 1);
 
     void integrate(float dt) final;
+
+private:
+    float damp{1.0};
+
 };
 
 template<template<typename> typename Layout>
@@ -116,6 +135,9 @@ void Solver2D<Layout>::run(float dt) {
     for(auto i = 0; i < N; ++i){
         solve(sdt);
     }
+//    for(auto i = 0; i < N; i++){
+//        m_collisionHandler.resolveCollision();
+//    }
 }
 
 template<template<typename> typename Layout>
@@ -145,7 +167,7 @@ void BasicSolver<Layout>::integrate(float dt) {
 #pragma loop(hint_parallel(8))
     for(int i = 0; i < N; i++){
         position[i] += velocity[i] * dt;
-        velocity[i] += G * dt;
+        velocity[i] = velocity[i] * glm::pow(damp, dt)  + G * dt;
     }
 }
 
@@ -164,27 +186,19 @@ void VarletIntegrationSolver<Layout>::integrate(float dt) {
     const glm::vec2 G = this->m_gravity;
 
     auto position = this->m_particles->position();
-    auto prevPosition = this->m_particles->m_prevPosition();
-    auto velocity = this->m_particles->velocity();
+    auto prevPosition = this->m_particles->previousPosition();
+
+#pragma loop(hint_parallel(8))
     for(int i = 0; i < N; i++){
         auto p0 = prevPosition[i];
         auto p1 = position[i];
         auto p2 = 2.f * p1 - p0 + G * dt * dt;
         position[i] = p2;
         prevPosition[i] = p1;
-        velocity[i] = (p2 - p1)/dt;
     }
 }
 
 template<template<typename> typename Layout>
 void VarletIntegrationSolver<Layout>::postSolve(float dt) {
-    const auto N = this->m_particles->size();
 
-    auto position = this->m_particles->position();
-    auto prevPosition = this->m_particles->m_prevPosition();
-    auto velocity = this->m_particles->velocity();
-
-    for(int i = 0; i < N; i++){
-        prevPosition[i] = position[i] - velocity[i] * dt;
-    }
 }

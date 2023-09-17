@@ -18,6 +18,9 @@
 #include <span>
 #include <memory>
 #include "particle_emitter.h"
+#include "collision_handler.h"
+
+
 using uDimension = glm::uvec2;
 using Dimension = glm::vec2;
 
@@ -34,7 +37,7 @@ class World2D : public VulkanBaseApp {
 public:
     World2D() = default;
 
-    World2D(const std::string& title, Bounds2D bounds, uDimension screenDim, Emitters<Layout>&& emitters);
+    World2D(const std::string& title, Bounds2D bounds, uDimension screenDim, Emitters<Layout>&& emitters, float radius = 0.1f);
 
 protected:
     void initApp() final;
@@ -124,11 +127,13 @@ private:
 
     float m_restitution{0.5};
     bool m_gravityOn{true};
-    float m_radius{0.1};
+    float m_radius{};
     int physicsFrame{1};
     bool debugMode{false};
     bool nextFrame{false};
     int fixedUpdatesPerSecond{60};
     std::vector<std::unique_ptr<ParticleEmitter<Layout>>> emitters;
-
+    bool pausePhysics{false};
+    bool solveCollisions{false};
+    int collisionIterations{100};
 };

@@ -2,6 +2,7 @@
 #include "model2d.h"
 #include "particle.h"
 #include "spacial_hash.h"
+#include "c_debug.h"
 #include <glm/glm.hpp>
 #include <memory>
 #include <array>
@@ -10,33 +11,44 @@
 #include <barrier>
 #include <latch>
 #include <spdlog/spdlog.h>
+#include <glm/gtc/epsilon.hpp>
 
 template<template<typename> typename Layout>
 inline void boundsCheck(Particle2D<Layout>& particle, const Bounds2D& bounds, int i) {
-    auto [min, max] = bounds;
-
     auto radius = particle.radius()[i];
     auto& position = particle.position()[i];
     auto& velocity = particle.velocity()[i];
+    bool collides = false;
 
-    min += radius;
-    max -= radius;
+    auto [min, max] = shrink(bounds, radius);
+
     auto& p = position;
     if(p.x < min.x){
         p.x = min.x;
         velocity.x *= -1;
+        collides = true;
     }
     if(p.x > max.x){
         p.x = max.x;
         velocity.x *= -1;
+        collides = true;
     }
     if(p.y < min.y){
         p.y = min.y;
         velocity.y *= -1;
+        // remove velocity caused by gravity
+        // FIXME remove magic number and pass in gravity and frame rate
+        velocity.y -= 0.163333f;
+        velocity.y = glm::max(0.f, velocity.y);
+        collides = true;
     }
     if(p.y > max.y){
         p.y = max.y;
         velocity.y *= -1;
+        collides = true;
+    }
+    if(collides){
+        boundCollisions.push_back(i);
     }
 }
 
@@ -62,6 +74,7 @@ public:
         int max{0};
         int min{0};
         int next{0};
+        int total{0};
     };
 
     CollisionStats collisionStats{};
@@ -73,6 +86,8 @@ public:
             , float maxRadius);
 
     void resolveCollision();
+
+    void aBoundsCheck();
 
     int generateContact(int ia, int ib);
 
@@ -87,9 +102,9 @@ private:
     std::vector<Contact> m_contacts;
     size_t m_numContacts{};
     float m_maxRadius{};
-    int numThreads{4};
-    std::barrier<> m_syncPoint;
-    std::latch m_startLatch;
+    int numThreads{1};
+    std::barrier<> m_syncPoint{0};
+    std::latch m_startLatch{0};
     std::vector<std::thread> workers;
     std::atomic_bool m_startCollisionProcessing{false};
     std::vector<std::atomic_bool> m_collisionProcessingDone;
@@ -117,6 +132,7 @@ std::thread CollisionHandler<Layout>::worker(int id, int numWorkers) {
             const auto numParticles = m_particles->size();
 
             auto vPositions = m_particles->position();
+
             for(int i = 0; i < numParticles; i++){
                 auto& position = vPositions[i];
 
@@ -136,6 +152,7 @@ std::thread CollisionHandler<Layout>::worker(int id, int numWorkers) {
                 collisionStats.min = glm::min(collisionStats.min, collisions);
 
                 collisionStats.next %= collisionStats.average.size();
+                collisionStats.total += collisions;
             }
 
             for(auto i = 0; i < numParticles; i++){
@@ -165,57 +182,64 @@ CollisionHandler<Layout>::CollisionHandler(std::shared_ptr<Particle2D<Layout>>  
 
 template<template<typename> typename Layout>
 void CollisionHandler<Layout>::resolveCollision() {
-    static bool firstCall = true;
-    if(firstCall){
-        m_collisionProcessingDone = std::vector<std::atomic_bool>(numThreads);
-        for(auto i = 0; i < numThreads; i++){
-            auto thread = worker(i, numThreads);
-            workers.push_back(std::move(thread));
-        }
-        m_startLatch.count_down(numThreads);
-        firstCall = false;
-    }
-
-    const auto numParticles = m_particles->size();
-    grid.initialize(*m_particles, numParticles);
-    m_startCollisionProcessing = true;
-
-    auto done = false;
-    do {
-        for(auto& cDone : m_collisionProcessingDone){
-            done |= cDone.load();
-        }
-    }while(!done);
-    for(auto& cDone : m_collisionProcessingDone){
-        cDone.store(false);
-    }
-//    m_syncPoint.arrive_and_wait();
-//    m_syncPoint.arrive_and_wait();
-
+//    static bool firstCall = true;
+//    if(firstCall){
+//        m_collisionProcessingDone = std::vector<std::atomic_bool>(numThreads);
+//        for(auto i = 0; i < numThreads; i++){
+//            auto thread = worker(i, numThreads);
+//            workers.push_back(std::move(thread));
+//        }
+//        m_startLatch.count_down(numThreads);
+//        firstCall = false;
+//    }
+//
 //    const auto numParticles = m_particles->size();
 //    grid.initialize(*m_particles, numParticles);
+//    m_startCollisionProcessing = true;
 //
-//    auto gridSpacing = m_maxRadius * 2;
-//    auto vPositions = m_particles->position();
-//    for(int i = 0; i < numParticles; i++){
-//        auto& position = vPositions[i];
-//        auto ids = grid.query(position, glm::vec2(gridSpacing));
-//
-//        int collisions = 0;
-//        for(int j : ids){
-//            if(i == j) continue;
-//            collisions += resolveCollision(i, j);
+//    auto done = false;
+//    do {
+//        for(auto& cDone : m_collisionProcessingDone){
+//            done |= cDone.load();
 //        }
-//        collisionStats.average[collisionStats.next++] = collisions;
-//        collisionStats.max = glm::max(collisionStats.max, collisions);
-//        collisionStats.min = glm::min(collisionStats.min, collisions);
-//
-//        collisionStats.next %= collisionStats.average.size();
+//    }while(!done);
+//    for(auto& cDone : m_collisionProcessingDone){
+//        cDone.store(false);
 //    }
-//
-//   for(auto i = 0; i < numParticles; i++){
-//        boundsCheck(*m_particles, m_worldBounds, i);
-//    }
+    const auto numParticles = m_particles->size();
+    grid.initialize(*m_particles, numParticles);
+
+    auto vPositions = m_particles->position();
+
+    for(int i = 0; i < numParticles; i++){
+        auto& position = vPositions[i];
+
+        auto ids = grid.query(position, glm::vec2(m_maxRadius));
+
+        int collisions = 0;
+        for(int j : ids){
+            if(i == j) continue;
+            collisions += resolveCollision(i, j);
+        }
+        collisionStats.average[collisionStats.next++] = collisions;
+        collisionStats.max = glm::max(collisionStats.max, collisions);
+        collisionStats.min = glm::min(collisionStats.min, collisions);
+
+        collisionStats.next %= collisionStats.average.size();
+        collisionStats.total += collisions;
+    }
+
+    for(auto i = 0; i < numParticles; i++){
+        boundsCheck(*m_particles, m_worldBounds, i);
+    }
+}
+
+template<template<typename> typename Layout>
+void CollisionHandler<Layout>::aBoundsCheck() {
+    const auto numParticles = m_particles->size();
+    for(auto i = 0; i < numParticles; i++){
+        boundsCheck(*m_particles, m_worldBounds, i);
+    }
 }
 
 template<template<typename> typename Layout>
@@ -229,7 +253,7 @@ int CollisionHandler<Layout>::generateContact(int ia, int ib) {
     auto rr = radius[ia] + radius[ib];
     rr *= rr;
     auto dd = glm::dot(dir, dir);
-    if(dd == 0 || dd > rr) return 0;
+    if(dd == 0 || dd >= rr) return 0;
 
     auto d = glm::sqrt(dd);
     m_contacts[m_numContacts].ia = ia;
@@ -244,6 +268,7 @@ int CollisionHandler<Layout>::generateContact(int ia, int ib) {
 template<template<typename> typename Layout>
 int CollisionHandler<Layout>::resolveCollision(int ia, int ib) {
     auto position = m_particles->position();
+    auto prevPosition = m_particles->previousPosition();
     auto velocity = m_particles->velocity();
     auto inverseMass = m_particles->inverseMass();
     auto restitution = m_particles->restitution();
@@ -266,18 +291,23 @@ int CollisionHandler<Layout>::resolveCollision(int ia, int ib) {
 
     auto v1 = glm::dot(velocity[ia], dir);
     auto v2 = glm::dot(velocity[ib], dir);
+    auto vs = dot(velocity[ib] - velocity[ia], dir);
 
     auto m1 = 1/inverseMass[ia];
     auto m2 = 1/inverseMass[ib];
 
     auto rest = (restitution[ia] + restitution[ib]) * 0.5f;
-
-    auto newV1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * rest) / (m1 + m2);
-    auto newV2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * rest) / (m1 + m2);
+//    auto cvs = (v1 - v2) * rest;
+    auto cvs = -vs * rest;
+    auto newV1 = (m1 * v1 + m2 * v2 - m2 * -cvs) / (m1 + m2);
+    auto newV2 = (m1 * v1 + m2 * v2 - m1 * cvs) / (m1 + m2);
 
     velocity[ia] += dir * (newV1 - v1);
     velocity[ib] += dir * (newV2 - v2);
     boundsCheck(*m_particles, m_worldBounds, ia);
     boundsCheck(*m_particles, m_worldBounds, ib);
+
+    ballCollisions.push_back(ia);
+    ballCollisions.push_back(ib);
     return 1;
 }

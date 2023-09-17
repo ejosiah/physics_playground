@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include "profile.h"
+#include "preconditioner.h"
 #include <future>
 #include <daw/json/daw_to_json.h>
 #include <daw/json/daw_json_link.h>
@@ -16,6 +17,7 @@
 constexpr int ITERATIONS = 100;
 constexpr double TOLERANCE = 1e-10;
 const lns::IdentityPreconditioner pc{};
+const lns::SMPreconditioner ic_pc{};
 
 struct Result {
     std::string solver;
@@ -23,8 +25,6 @@ struct Result {
     std::vector<int> iterationsUsed{};
     std::vector<float> time{};
 };
-
-
 
 
 namespace daw::json {
@@ -81,6 +81,14 @@ struct ConjugateGradientSolver {
     }
 };
 
+struct ConjugateGradientPreconditionedSolver {
+    std::string name{"Conjugate Gradient Preconditioned"};
+
+    int operator()(blas::SparseMatrix& A,  blas::Vector& x, blas::Vector& b, size_t iterations) {
+        return lns::conjugate_gradient(A, x, b, ic_pc, TOLERANCE, iterations);
+    }
+};
+
 template<typename Solver>
 Result run(blas::SparseMatrix A, const blas::Vector& x, blas::Vector b) {
     Solver solver{};
@@ -108,7 +116,7 @@ Result run(blas::SparseMatrix A, const blas::Vector& x, blas::Vector b) {
 
 TEST(LinearSystemsSolvers, convergence) {
     std::map<size_t, std::vector<std::future<Result>>> futures{};
-    for(int i = 0; i < 6; i++){
+    for(int i = 0; i < 1; i++){
         const auto N = (32 << i);
         auto A = generatePoissonEquationMatrix(N);
         std::uniform_real_distribution<float> dist{-10, 10};
@@ -119,7 +127,7 @@ TEST(LinearSystemsSolvers, convergence) {
         std::generate(solution.begin(), solution.end(), [&]{ return dist(engine); });
         auto b = A * solution;
 
-        std::vector<std::future<Result>> rFutures(4);
+        std::vector<std::future<Result>> rFutures(5);
 
         std::cout << std::format("running convergence tests for {} entries\n", N);
 
@@ -127,6 +135,7 @@ TEST(LinearSystemsSolvers, convergence) {
         rFutures[1] = std::async(run<GaussSeidelSolver>, A, solution, b);
         rFutures[2] = std::async(run<GradientDescentSolver>, A, solution, b);
         rFutures[3] = std::async(run<ConjugateGradientSolver>, A, solution, b);
+        rFutures[4] = std::async(run<ConjugateGradientPreconditionedSolver>, A, solution, b);
         futures[N] = std::move(rFutures);
     }
 

@@ -42,8 +42,7 @@ void PointParticleEmitter2D<Layout>::onUpdate(float currentTime, float deltaTime
 
     if(maxNumberOfNewParticles > 0) {
         emit(maxNumberOfNewParticles, deltaTime);
-
-        m_numberOfEmittedParticles = particles->size();
+        m_numberOfEmittedParticles += maxNumberOfNewParticles;
     }
 }
 

@@ -59,3 +59,12 @@ Bounds<L> shrink(const Bounds<L>& bounds, float factor){
 
     return newBounds;
 }
+
+template<glm::length_t L>
+Bounds<L> expand(const Bounds<L>& bounds, float factor){
+    Bounds<L> newBounds = bounds;
+    newBounds.lower -= factor;
+    newBounds.upper += factor;
+
+    return newBounds;
+}

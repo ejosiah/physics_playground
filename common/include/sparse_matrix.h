@@ -83,6 +83,30 @@ namespace blas {
             return result;
         }
 
+        template<typename U>
+        friend SparseMatrixT<U> operator-(const SparseMatrixT<U>& a, const SparseMatrixT<U>& b){
+            assert(a.rows() == b.rows());
+            const auto size = a.rows();
+
+            SparseMatrixT<U> c{size};
+            for(auto i = 0; i < a.rows(); i++){
+                c[i] = a[i] - b[i];
+            }
+            return c;
+        }
+
+        template<typename U>
+        friend SparseMatrixT<U> operator+(const SparseMatrixT<U>& a, const SparseMatrixT<U>& b){
+            assert(a.rows() == b.rows());
+            const auto size = a.rows();
+
+            SparseMatrixT<U> c{size};
+            for(auto i = 0; i < a.rows(); i++){
+                c[i] = a[i] + b[i];
+            }
+            return c;
+        }
+
         [[nodiscard]]
         inline Size size() const {
             return std::make_tuple(m_data.size(), m_data.size());

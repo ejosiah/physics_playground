@@ -17,9 +17,10 @@ A precondition(A a) {
 
     for(auto k = 0; k < N; ++k){
         a[k][k] *= a[k][k];
+        auto akk = a[k][k];
         for(auto i = k+1; i < N; ++i) {
             if(a[i][k] != 0){
-                a[i][k] = a[i][k]/a[k][k];
+                a[i][k] = a[i][k]/akk;
             }
         }
 

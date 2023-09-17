@@ -1,6 +1,7 @@
 #include "world2d.h"
 #include "serializer.h"
 #include "profile.h"
+#include "c_debug.h"
 #include <GraphicsPipelineBuilder.hpp>
 #include <DescriptorSetBuilder.hpp>
 #include <xforms.h>
@@ -8,12 +9,15 @@
 #include <ImGuiPlugin.hpp>
 #include <yaml-cpp/yaml.h>
 #include <memory>
+#include <glm_format.h>
+#include <fmt/format.h>
 
 template<template<typename> typename Layout>
-World2D<Layout>::World2D(const std::string &title, Bounds2D bounds, uDimension screenDim, Emitters<Layout>&& emitters)
+World2D<Layout>::World2D(const std::string &title, Bounds2D bounds, uDimension screenDim, Emitters<Layout>&& emitters, float radius)
         : VulkanBaseApp(title, create(screenDim))
         , m_bounds(bounds)
         , emitters(std::move(emitters))
+        , m_radius(radius)
 {
     std::unique_ptr<Plugin> plugin = std::make_unique<ImGuiPlugin>();
     addPlugin(plugin);
@@ -51,7 +55,7 @@ VkCommandBuffer *World2D<Layout>::buildCommandBuffers(uint32_t imageIndex, uint3
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
     static std::array<VkClearValue, 2> clearValues;
-    clearValues[0].color = {1, 1, 1, 1};
+    clearValues[0].color = {0, 0, 0, 1};
     clearValues[1].depthStencil = {1.0, 0u};
 
     VkRenderPassBeginInfo rPassInfo = initializers::renderPassBeginInfo();
@@ -96,19 +100,24 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     cAvg /= collisionStats.average.size();
 
 
-    ImGui::TextColored({0, 0, 0, 1}, "physics %d ms/frame", to<int>(avg));
-    ImGui::TextColored({0, 0, 0, 1}, "%d frames/second", framePerSecond);
-    ImGui::TextColored({0, 0, 0, 1}, "%d particles", particles.handle->size());
-    ImGui::TextColored({0, 0, 0, 1}, "%d min collisions", collisionStats.min);
-    ImGui::TextColored({0, 0, 0, 1}, "%d average collisions", to<int>(cAvg));
-    ImGui::TextColored({0, 0, 0, 1}, "%d max collisions", collisionStats.max);
+    ImGui::TextColored({1, 1, 1, 1}, "physics %d ms/frame", to<int>(avg));
+    ImGui::TextColored({1, 1, 1, 1}, "%d frames/second", framePerSecond);
+    ImGui::TextColored({1, 1, 1, 1}, "%d particles", particles.handle->size());
+    ImGui::TextColored({1, 1, 1, 1}, "%d total collisions", collisionStats.total);
+    ImGui::TextColored({1, 1, 1, 1}, "%d min collisions", collisionStats.min);
+    ImGui::TextColored({1, 1, 1, 1}, "%d average collisions", to<int>(cAvg));
+    ImGui::TextColored({1, 1, 1, 1}, "%d max collisions", collisionStats.max);
+    ImGui::TextColored({1, 1, 1, 1}, "particle[0] velocity(%s)", fmt::format("{}", particles.velocity[0]).c_str());
+    collisionStats.total = 0;
 
     ImGui::End();
     if(avg >= 16){
         for(auto& emitter : emitters) emitter->disable();
     }
 
-//    ImGui::Begin("controls");
+    ImGui::Begin("controls");
+    float y = pausePhysics ? 100 : 80;
+    ImGui::SetWindowSize({250, y});
 //    ImGui::Checkbox("debug", &debugMode);
 //    if(debugMode){
 //        ImGui::SameLine();
@@ -117,7 +126,17 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 //    if(ImGui::Button("snapshot")){
 //       snapshot();
 //    }
-//    ImGui::End();
+    if(ImGui::Button("pause")){
+        pausePhysics = !pausePhysics;
+    }
+
+    if(pausePhysics){
+        ImGui::SliderInt("iterations: ", &collisionIterations, 10, 5000);
+        if(ImGui::Button("resolve collision")) {
+            solveCollisions = !solveCollisions;
+        }
+    }
+    ImGui::End();
 
     plugin<ImGuiPlugin>(IM_GUI_PLUGIN).draw(commandBuffer);
 
@@ -125,22 +144,32 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
 
 template<template<typename> typename Layout>
 void World2D<Layout>::update(float time) {
-    if(fixedUpdatesPerSecond == 0){
-        fixedUpdate(time);
-    }else {
-        static float deltaTime = 1.0f / to<float>(fixedUpdatesPerSecond);
-        static float elapsedTime = 0;
-        elapsedTime += time;
-        if(elapsedTime > deltaTime){
-            elapsedTime = 0;
-            fixedUpdate(deltaTime);
+    if(!pausePhysics) {
+        if (fixedUpdatesPerSecond == 0) {
+            fixedUpdate(time);
+        } else {
+            static float deltaTime = 1.0f / to<float>(fixedUpdatesPerSecond);
+            static float elapsedTime = 0;
+            elapsedTime += time;
+            if (elapsedTime > deltaTime) {
+                elapsedTime = 0;
+                fixedUpdate(deltaTime);
+            }
         }
     }
+//    if(solveCollisions){
+//        for(auto i = 0; i < collisionIterations; i++){
+//            solver->collisionHandler().resolveCollision();
+//        }
+//        solveCollisions = false;
+//    }
     transferStateToGPU();
 }
 
 template<template<typename> typename Layout>
 void World2D<Layout>::fixedUpdate(float deltaTime) {
+    initDebug();
+    colorParticles();
     static int count = 0;
     for(auto& emitter : emitters) {
         emitter->update(deltaTime);
@@ -150,6 +179,12 @@ void World2D<Layout>::fixedUpdate(float deltaTime) {
     });
     execTime[count++] = to<double>(duration.count());
     count %= execTime.size();
+    for(auto i : ballCollisions){
+        particles.color[i] = {0.961, 0.714, 0.260, 1};
+    }
+    for(auto i : boundCollisions){
+        particles.color[i] = {1, 0, 0, 1};
+    }
 }
 
 template<template<typename> typename Layout>
@@ -341,9 +376,9 @@ void World2D<Layout>::colorParticles() {
     auto cRand = rng(0, 1, (1 << 11));
 
     std::generate(particles.color.begin(), particles.color.end(), [&](){
-        return  glm::vec4(cRand(), cRand(), cRand(), 1 );
+//        return  glm::vec4(cRand(), cRand(), cRand(), 1 );
+        return  glm::vec4(1);
     });
-    particles.color[0] = glm::vec4(0);
 }
 
 template<template<typename> typename Layout>

@@ -9,16 +9,6 @@
 #include <numeric>
 #include <format>
 
-
-struct ichoPreconditioner {
-
-    template<typename Matrix>
-    Matrix operator()(const Matrix& matrix) const {
-        auto M =  precondition(matrix);
-        return lowerTriangularInvert(M);
-    }
-};
-
 class LinearSystemsFixture : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -133,7 +123,7 @@ TEST_F(LinearSystemsFixture, playground) {
         std::printf("%f ", v);
     }
 
-    auto pc = ichoPreconditioner{};
+    auto pc = lns::ichoPreconditioner{};
     iterations = 8;
     x.clear();
     iterations = lns::conjugate_gradient(A, x, b, pc, threshold, iterations);
@@ -143,7 +133,7 @@ TEST_F(LinearSystemsFixture, playground) {
     }
 }
 
-TEST_F(LinearSystemsFixture, loadMatrix) {
+TEST_F(LinearSystemsFixture, loadMatrixIgnore) {
 //    SparseMatrix matrix = load<float>(R"(C:\Users\Josiah Ebhomenye\CLionProjects\physics_playground\common\data\1138_bus.mtx)");
     SparseMatrix matrix = generatePoissonEquationMatrix(32);
     Vector expected(matrix.rows());
@@ -158,11 +148,13 @@ TEST_F(LinearSystemsFixture, loadMatrix) {
     Vector b = matrix * expected;
     Vector x(matrix.rows());
     auto pc = lns::IdentityPreconditioner{};
+    auto spc = lns::SMPreconditioner{};
+    auto icpc = lns::ichoPreconditioner{};
     auto A = static_cast<MatrixT<float>>(matrix);
     auto iterations = 0;
    // lns::jacobi(matrix, x, b, size_t{10});
-    //iterations = lns::conjugate_gradient(matrix, x, b, pc, 1e-4, iterations);
-    iterations = lns::gradient_descent(matrix, x, b, 1e-4, 10u);
+    iterations = lns::conjugate_gradient(A, x, b, icpc, 1e-4, iterations);
+//    iterations = lns::gradient_descent(matrix, x, b, 1e-4, 10u);
     std::cout << std::format("found solution after {} iterations\n", iterations);
 
     for(int i = 0; i < 10; i++){
