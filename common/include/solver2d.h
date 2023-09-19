@@ -5,7 +5,6 @@
 #include "particle.h"
 #include "spacial_hash.h"
 #include "snap.h"
-#include "collision_handler.h"
 #include <glm/glm.hpp>
 #include <spdlog/spdlog.h>
 #include <memory>
@@ -17,56 +16,109 @@
 constexpr float Gravity{-9.8};
 
 template<template<typename> typename Layout>
+inline void boundsCheck(Particle2D<Layout>& particle, const Bounds2D& bounds, int i) {
+    auto radius = particle.radius()[i];
+    auto& position = particle.position()[i];
+    auto& velocity = particle.velocity()[i];
+    bool collides = false;
+
+    auto [min, max] = shrink(bounds, radius);
+
+    auto& p = position;
+    if(p.x < min.x){
+        p.x = min.x;
+        velocity.x *= -1;
+        collides = true;
+    }
+    if(p.x > max.x){
+        p.x = max.x;
+        velocity.x *= -1;
+        collides = true;
+    }
+    if(p.y < min.y){
+        p.y = min.y;
+        velocity.y *= -1;
+        // remove velocity caused by gravity
+        // FIXME remove magic number and pass in gravity and frame rate
+//        velocity.y -= 0.163333f;
+//        velocity.y = glm::max(0.f, velocity.y);
+        collides = true;
+    }
+    if(p.y > max.y){
+        p.y = max.y;
+        velocity.y *= -1;
+        collides = true;
+    }
+//    if(collides){
+//        boundCollisions.push_back(i);
+//    }
+}
+
+inline bool contains(const Bounds2D& bounds, const glm::vec2& p){
+    auto [min, max] = bounds;
+    return
+            p.x >= min.x && p.x < max.x &&
+            p.y >= min.y && p.y < max.y;
+}
+
+struct CollisionStats{
+    std::array<int, 100> average{};
+    int max{0};
+    int min{0};
+    int next{0};
+    int total{0};
+};
+
+template<template<typename> typename Layout>
 class Solver2D {
 public:
     Solver2D() = default;
 
     Solver2D(std::shared_ptr<Particle2D<Layout>> particles
-             , Bounds2D worldBounds
-            , float maxRadius
-            , int m_iterations = 1);
+    , Bounds2D worldBounds);
 
     virtual ~Solver2D() = default;
 
-    void run(float dt);
-
-    virtual void preSolve(float dt){}
-
-    virtual void solve(float dt);
-
-    virtual void postSolve(float dt) {}
-
-    virtual void integrate(float dt) {};
-
-    virtual void resolveCollision();
-
-    CollisionHandler<Layout>::CollisionStats& collisionStats() {
-        return m_collisionHandler.collisionStats;
+    [[nodiscard]]
+    const Bounds2D& bounds() const {
+        return m_worldBounds;
     }
 
-    CollisionHandler<Layout>& collisionHandler() {
-        return m_collisionHandler;
+    Particle2D<Layout>& particles() {
+        return *m_particles;
     }
 
-    inline void gravity(glm::vec2 value) {
-        this->m_gravity = value;
+    [[nodiscard]]
+    const glm::vec2& gravity() const {
+        return m_gravity;
     }
+
+    virtual void solve(float dt) = 0;
 
 public:
+    CollisionStats collisionStats{};
 
 protected:
     Bounds2D m_worldBounds;
     std::shared_ptr<Particle2D<Layout>> m_particles;
-    int m_iterations{1};
     glm::vec2 m_gravity{0, -9.8};
-    CollisionHandler<Layout> m_collisionHandler;
 };
+
+template<template<typename> typename Layout>
+Solver2D<Layout>::Solver2D(std::shared_ptr<Particle2D<Layout>>  particles
+        , Bounds2D worldBounds)
+        : m_particles{ particles }
+        , m_worldBounds{ worldBounds }
+{}
+
+
 
 
 template<template<typename> typename Layout>
 class VoidSolver : public Solver2D<Layout> {
 public:
     VoidSolver() = default;
+
     ~VoidSolver() override = default;
 
     void solve(float dt) override {
@@ -75,23 +127,35 @@ public:
 };
 
 template<template<typename> typename Layout>
-class BasicSolver : public Solver2D<Layout> {
+class ExplicitEulerSolver : public Solver2D<Layout> {
 public:
-    BasicSolver() = default;
-
-    ~BasicSolver() final = default;
-
-    BasicSolver(std::shared_ptr<Particle2D<Layout>>
+    ExplicitEulerSolver(std::shared_ptr<Particle2D<Layout>>
             , Bounds2D worldBounds
             , float maxRadius
             , int iterations = 1);
 
-    void integrate(float dt) final;
+
+    ~ExplicitEulerSolver() override = default;
+
+    void solve(float dt) override;
+
+    void subStep(float dt);
+
+    void integrate(float dt);
+
+    void resolveCollision(float dt);
+
+    int resolveCollision(int ia, int ib);
+
+    void boundsCheck(int i);
 
 private:
-    float damp{1.0};
-
+    BoundedSpacialHashGrid2D m_grid;
+    int m_iterations{1};
+    float m_damp{1.0};
+    float m_radius;
 };
+
 
 template<template<typename> typename Layout>
 class VarletIntegrationSolver : public Solver2D<Layout> {
@@ -106,79 +170,297 @@ public:
             , int iterations = 1);
 
 
-    void postSolve(float dt) final;
+    void solve(float dt) override;
 
-    void integrate(float dt) final;
+    void subStep(float dt);
+
+    void integrate(float dt);
+
+    void resolveCollision(float dt);
+
+    int resolveCollision(int ia, int ib);
+
+    void boundsCheck(int i);
+
+private:
+    BoundedSpacialHashGrid2D m_grid;
+    int m_iterations{1};
+    float m_damp{1.0};
+    float m_radius;
 };
 
 
-using SeparateFieldMemoryLayoutBasicSolver = BasicSolver<SeparateFieldMemoryLayout>;
-using InterleavedMemoryLayoutBasicSolver = BasicSolver<InterleavedMemoryLayout>;
+template<template<typename> typename Layout>
+ExplicitEulerSolver<Layout>::ExplicitEulerSolver(std::shared_ptr<Particle2D<Layout>> particles, Bounds2D worldBounds, float maxRadius, int iterations)
+        : Solver2D<Layout>(particles, worldBounds)
+        , m_iterations(iterations)
+        , m_radius(maxRadius)
+{
+    glm::ivec2 gridSize = worldBounds.upper - worldBounds.lower;
+    m_grid = BoundedSpacialHashGrid2D{maxRadius * 2, gridSize };
+}
 
 template<template<typename> typename Layout>
-Solver2D<Layout>::Solver2D(std::shared_ptr<Particle2D<Layout>>  particles
-        , Bounds2D worldBounds
-        , float maxRadius
-        , int iterations)
-        : m_particles{ particles }
-        , m_worldBounds{ worldBounds }
-        , m_iterations{ iterations }
-        , m_collisionHandler{particles, worldBounds, maxRadius}
-{}
-
-template<template<typename> typename Layout>
-void Solver2D<Layout>::run(float dt) {
-    const auto N = m_iterations;
-    const auto sdt = dt/to<float>(N);
-
-    auto size = m_particles->size();
-    for(auto i = 0; i < N; ++i){
-        solve(sdt);
+void ExplicitEulerSolver<Layout>::solve(float dt) {
+    const auto sdt = dt/to<float>(m_iterations);
+    for(auto i = 0; i < m_iterations; i++){
+        subStep(sdt);
     }
-//    for(auto i = 0; i < N; i++){
-//        m_collisionHandler.resolveCollision();
+}
+template<template<typename> typename Layout>
+void ExplicitEulerSolver<Layout>::subStep(float dt) {
+    resolveCollision(dt);
+    integrate(dt);
+}
+
+
+
+template<template<typename> typename Layout>
+void ExplicitEulerSolver<Layout>::integrate(float dt){
+    auto& particles = this->particles();
+    const auto N = particles.size();
+    const glm::vec2 G = this->m_gravity;
+    auto position = particles.position();
+    auto velocity = particles.velocity();
+
+#pragma loop(hint_parallel(8))
+    for(int i = 0; i < N; i++){
+        position[i] += velocity[i] * dt;
+        velocity[i] = velocity[i] * glm::pow(m_damp, dt)  + G * dt;
+    }
+}
+
+template<template<typename> typename Layout>
+void ExplicitEulerSolver<Layout>::resolveCollision(float dt){
+    const auto numParticles = this->particles().size();
+    auto vPositions = this->particles().position();
+    m_grid.initialize(this->particles(), numParticles);
+
+    for(int i = 0; i < numParticles; i++){
+        auto& position = vPositions[i];
+
+        auto ids = m_grid.query(position, glm::vec2(m_radius * 2));
+
+        int collisions = 0;
+        for(int j : ids){
+            if(i == j) continue;
+            collisions += resolveCollision(i, j);
+        }
+        this->collisionStats.average[this->collisionStats.next++] = collisions;
+        this->collisionStats.max = glm::max(this->collisionStats.max, collisions);
+        this->collisionStats.min = glm::min(this->collisionStats.min, collisions);
+
+        this->collisionStats.next %= this->collisionStats.average.size();
+        this->collisionStats.total += collisions;
+    }
+    for(auto i = 0; i < numParticles; i++){
+        boundsCheck(i);
+    }
+}
+
+template<template<typename> typename Layout>
+void ExplicitEulerSolver<Layout>::boundsCheck(int i) {
+    auto radius = this->particles().radius()[i];
+    auto& position = this->particles().position()[i];
+    auto& velocity = this->particles().velocity()[i];
+    auto rest = this->particles().restitution()[i];
+
+    bool collides = false;
+
+    auto [min, max] = shrink(this->bounds(), radius);
+
+    auto& p = position;
+    glm::vec2 n{0};
+
+    if(p.x < min.x){
+        p.x = min.x;
+        velocity.x *= -rest;
+        collides = true;
+    }
+    if(p.x > max.x){
+        p.x = max.x;
+        velocity.x *= -rest;
+        collides = true;
+    }
+    if(p.y < min.y){
+        p.y = min.y;
+        velocity.y *= -rest;
+        // remove velocity caused by gravity
+        // FIXME remove magic number and pass in gravity and frame rate
+//        velocity.y -= 0.163333f;
+//        velocity.y = glm::max(0.f, velocity.y);
+        collides = true;
+    }
+    if(p.y > max.y){
+        p.y = max.y;
+        velocity.y *= -rest;
+        collides = true;
+    }
+
+    auto v = glm::dot(velocity, n);
+
+//    if(collides){
+//        boundCollisions.push_back(i);
 //    }
 }
 
 template<template<typename> typename Layout>
-void Solver2D<Layout>::solve(float dt) {
-    preSolve(dt);
-    integrate(dt);
-    resolveCollision();
-    postSolve(dt);
+int ExplicitEulerSolver<Layout>::resolveCollision(int ia, int ib){
+    auto position = this->particles().position();
+    auto velocity = this->particles().velocity();
+    auto inverseMass = this->particles().inverseMass();
+    auto restitution = this->particles().restitution();
+    auto radius = this->particles().radius();
+
+    auto& pa = position[ia];
+    auto& pb = position[ib];
+    glm::vec2 dir = pb - pa;
+    auto rr = radius[ia] + radius[ib];
+    rr *= rr;
+    auto dd = glm::dot(dir, dir);
+    if(dd == 0 || dd > rr) return 0;
+
+    auto d = glm::sqrt(dd);
+    dir /= d;
+
+    auto corr = (radius[ib] + radius[ia] - d) * .5f;
+    pa -= dir * corr;
+    pb += dir * corr;
+
+    auto v1 = glm::dot(velocity[ia], dir);
+    auto v2 = glm::dot(velocity[ib], dir);
+
+    auto m1 = 1/inverseMass[ia];
+    auto m2 = 1/inverseMass[ib];
+
+    auto newV1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * restitution[ia]) / (m1 + m2);
+    auto newV2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * restitution[ib]) / (m1 + m2);
+
+    velocity[ia] += dir * (newV1 - v1);
+    velocity[ib] += dir * (newV2 - v2);
+
+    return 1;
+}
+
+
+template<template<typename> typename Layout>
+VarletIntegrationSolver<Layout>::VarletIntegrationSolver(std::shared_ptr<Particle2D<Layout>> particles, Bounds2D worldBounds, float maxRadius, int iterations)
+        : Solver2D<Layout>(particles, worldBounds)
+        , m_iterations(iterations)
+        , m_radius(maxRadius)
+{
+    glm::ivec2 gridSize = worldBounds.upper - worldBounds.lower;
+    m_grid = BoundedSpacialHashGrid2D{maxRadius * 2, gridSize };
 }
 
 template<template<typename> typename Layout>
-void Solver2D<Layout>::resolveCollision() {
-    m_collisionHandler.resolveCollision();
-}
-
-template<template<typename> typename Layout>
-BasicSolver<Layout>::BasicSolver(std::shared_ptr<Particle2D<Layout>> particles, Bounds2D worldBounds, float maxRadius, int iterations)
-: Solver2D<Layout>(particles, worldBounds, maxRadius, iterations)
-{}
-
-template<template<typename> typename Layout>
-void BasicSolver<Layout>::integrate(float dt) {
-    const auto N = this->m_particles->size();
-    const glm::vec2 G = this->m_gravity;
-    auto position = this->m_particles->position();
-    auto velocity = this->m_particles->velocity();
-#pragma loop(hint_parallel(8))
-    for(int i = 0; i < N; i++){
-        position[i] += velocity[i] * dt;
-        velocity[i] = velocity[i] * glm::pow(damp, dt)  + G * dt;
+void VarletIntegrationSolver<Layout>::solve(float dt) {
+    const auto sdt = dt/to<float>(m_iterations);
+    for(auto i = 0; i < m_iterations; i++){
+        subStep(sdt);
     }
 }
 
 template<template<typename> typename Layout>
-VarletIntegrationSolver<Layout>::VarletIntegrationSolver(std::shared_ptr<Particle2D<Layout>> particles
-                                                         , Bounds2D worldBounds
-                                                         , float maxRadius
-                                                         , int iterations)
-:Solver2D<Layout>(particles, worldBounds, maxRadius, iterations)
-{}
+void VarletIntegrationSolver<Layout>::subStep(float dt) {
+    resolveCollision(dt);
+    integrate(dt);
+}
 
+template<template<typename> typename Layout>
+void VarletIntegrationSolver<Layout>::resolveCollision(float dt) {
+    const auto numParticles = this->particles().size();
+    auto vPositions = this->particles().position();
+    m_grid.initialize(this->particles(), numParticles);
+
+    for(int i = 0; i < numParticles; i++){
+        auto& position = vPositions[i];
+
+        auto ids = m_grid.query(position, glm::vec2(m_radius * 2));
+
+        int collisions = 0;
+        for(int j : ids){
+            if(i == j) continue;
+            collisions += resolveCollision(i, j);
+        }
+        this->collisionStats.average[this->collisionStats.next++] = collisions;
+        this->collisionStats.max = glm::max(this->collisionStats.max, collisions);
+        this->collisionStats.min = glm::min(this->collisionStats.min, collisions);
+
+        this->collisionStats.next %= this->collisionStats.average.size();
+        this->collisionStats.total += collisions;
+    }
+    for(auto i = 0; i < numParticles; i++){
+        boundsCheck(i);
+    }
+}
+
+template<template<typename> typename Layout>
+int VarletIntegrationSolver<Layout>::resolveCollision(int ia, int ib) {
+    auto position = this->particles().position();
+    auto restitution = this->particles().restitution();
+    auto radius = this->particles().radius();
+
+    auto& pa = position[ia];
+    auto& pb = position[ib];
+    glm::vec2 dir = pb - pa;
+    auto rr = radius[ia] + radius[ib];
+    auto rr2 = rr * rr;
+    auto dd = glm::dot(dir, dir);
+    if(dd == 0 || dd > rr2) return 0;
+
+    auto d = glm::sqrt(dd);
+    dir /= d;
+
+    auto corr = restitution[ia] * (rr - d) * .5f;
+    pa -= dir * corr;
+    pb += dir * corr;
+
+    return 1;
+}
+
+template<template<typename> typename Layout>
+void VarletIntegrationSolver<Layout>::boundsCheck(int i) {
+    auto radius = this->particles().radius()[i];
+    auto& position = this->particles().position()[i];
+    auto rest = this->particles().restitution()[i];
+
+    bool collides = false;
+
+    auto [min, max] = shrink(this->bounds(), radius);
+
+    auto& p = position;
+    glm::vec2 n{0};
+    glm::vec2 d{0};
+
+    if(p.x < min.x){
+        n.x = -1;
+        d.x = min.x - p.x;
+        collides = true;
+    }
+    if(p.x > max.x){
+        n.x = 1;
+        d.x = p.x - max.x;
+        collides = true;
+    }
+    if(p.y < min.y){
+        n.y = -1;
+        d.y = min.y - p.y;
+        collides = true;
+    }
+    if(p.y > max.y){
+        n.y = 1;
+        d.y = p.y - max.y;
+        collides = true;
+    }
+
+    if(collides) {
+        p -= glm::normalize(n) * glm::length(d) * rest;
+    }
+//    if(collides){
+//        boundCollisions.push_back(i);
+//    }
+}
 
 template<template<typename> typename Layout>
 void VarletIntegrationSolver<Layout>::integrate(float dt) {
@@ -200,7 +482,4 @@ void VarletIntegrationSolver<Layout>::integrate(float dt) {
     }
 }
 
-template<template<typename> typename Layout>
-void VarletIntegrationSolver<Layout>::postSolve(float dt) {
 
-}

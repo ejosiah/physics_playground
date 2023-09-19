@@ -95,7 +95,7 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     auto avg = std::accumulate(execTime.begin(), execTime.end(), 0.0);
     avg /= (to<double>(execTime.size()));
 
-    auto& collisionStats = solver->collisionStats();
+    auto& collisionStats = solver->collisionStats;
     auto cAvg = std::accumulate(collisionStats.average.begin(), collisionStats.average.end(), 0.0);
     cAvg /= collisionStats.average.size();
 
@@ -169,22 +169,29 @@ void World2D<Layout>::update(float time) {
 template<template<typename> typename Layout>
 void World2D<Layout>::fixedUpdate(float deltaTime) {
     initDebug();
-    colorParticles();
+//    colorParticles();
     static int count = 0;
     for(auto& emitter : emitters) {
         emitter->update(deltaTime);
     }
     auto duration = profile<chrono::milliseconds>([&] {
-        solver->run(deltaTime);
+        solver->solve(deltaTime);
     });
     execTime[count++] = to<double>(duration.count());
     count %= execTime.size();
-    for(auto i : ballCollisions){
-        particles.color[i] = {0.961, 0.714, 0.260, 1};
-    }
-    for(auto i : boundCollisions){
-        particles.color[i] = {1, 0, 0, 1};
-    }
+//    for(auto i : ballCollisions){
+//        particles.color[i] = {0.961, 0.714, 0.260, 1};
+//    }
+//    for(auto i : boundCollisions){
+//        particles.color[i] = {1, 0, 0, 1};
+//    }
+//    for(auto i = 0; i < g_numThreads; i++){
+//        for(auto pass = 0; pass < 2; pass++){
+//            for(auto id : threadGroup[pass][i]){
+//                particles.color[id] = groupColor[pass][i];
+//            }
+//        }
+//    }
 }
 
 template<template<typename> typename Layout>
@@ -366,8 +373,7 @@ void World2D<Layout>::createParticles() {
     colorParticles();
 //    loadParticles();
     solver = std::make_unique<VarletIntegrationSolver<Layout>>(particles.handle, m_bounds, m_radius, m_numIterations);
-
-
+//    solver = std::make_unique<VoidSolver<Layout>>();
 }
 
 template<template<typename> typename Layout>
@@ -376,8 +382,8 @@ void World2D<Layout>::colorParticles() {
     auto cRand = rng(0, 1, (1 << 11));
 
     std::generate(particles.color.begin(), particles.color.end(), [&](){
-//        return  glm::vec4(cRand(), cRand(), cRand(), 1 );
-        return  glm::vec4(1);
+        return  glm::vec4(cRand(), cRand(), cRand(), 1 );
+//        return  glm::vec4(1);
     });
 }
 

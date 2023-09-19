@@ -18,7 +18,6 @@
 #include <span>
 #include <memory>
 #include "particle_emitter.h"
-#include "collision_handler.h"
 
 
 using uDimension = glm::uvec2;

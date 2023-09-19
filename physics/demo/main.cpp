@@ -22,7 +22,7 @@ int main(int, char**){
         .withSpeed(10)
         .withSpreadAngleInDegrees(90)
         .withMaxNumberOfNewParticlesPerSecond(10)
-        .withMaxNumberOfParticles(std::numeric_limits<int>::max())
+        .withMaxNumberOfParticles(20000)
         .withRandomSeed((1 << 20))
         .withRadius(radius)
         .withMass(1)

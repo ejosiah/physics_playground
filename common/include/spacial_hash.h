@@ -43,6 +43,10 @@ public:
     [[nodiscard]]
     int32_t hashPosition(glm::vec2 position) const {
         auto pid = intCoords(position);
+        if constexpr (!Unbounded){
+            auto gridSize = glm::ivec2(glm::vec2(m_gridSize) / m_spacing);
+            pid = glm::clamp(pid, glm::ivec2(0), gridSize - 1);
+        }
        return hash(pid);
     }
 
@@ -82,35 +86,44 @@ public:
 
     template<template<typename> typename Layout>
     void initialize(Particle2D<Layout>& particles, size_t size) {
-        const auto numObjects = glm::min(size, m_cellEntries.size());
-        m_set.reset();
-        std::fill_n(m_counts.begin(), m_counts.size(), 0);
-        std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
+        static int id = -1;
         const auto positions = particles.position();
-        for (auto i = 0; i < numObjects; i++) {
-            auto h = hashPosition(positions[i]);
+
+        try {
+            const auto numObjects = glm::min(size, m_cellEntries.size());
+            m_set.reset();
+            std::fill_n(m_counts.begin(), m_counts.size(), 0);
+            std::fill_n(m_cellEntries.begin(), m_cellEntries.size(), 0);
+            for (auto i = 0; i < numObjects; i++) {
+                id = i;
+                auto h = hashPosition(positions[i]);
 //                spdlog::info("pos: {}, hash: {}", positions[i], h);
-            m_counts[h]++;
-        }
-
-        auto first = m_counts.begin();
-        auto last = m_counts.end();
-        std::advance(last, -1);
-        std::partial_sum(first, last, first);
-
-        m_counts[m_tableSize] = m_counts[m_tableSize - 1];
-
-        auto gridSize = glm::ivec2(glm::vec2(m_gridSize) / m_spacing);
-        for (auto i = 0; i < numObjects; i++) {
-            auto pid = intCoords(positions[i]);
-            if(pid.x < 0 || pid.x > gridSize.x || pid.y < 0 || pid.y > gridSize.y){
-                spdlog::info("point {} {} is outside of grid", positions[i], glm::vec2(pid));
+                m_counts[h]++;
             }
-            const auto h = hashPosition(positions[i]);
-            m_set.set(h);
-            m_counts[h]--;
+
+            auto first = m_counts.begin();
+            auto last = m_counts.end();
+            std::advance(last, -1);
+            std::partial_sum(first, last, first);
+
+            m_counts[m_tableSize] = m_counts[m_tableSize - 1];
+
+            auto gridSize = glm::ivec2(glm::vec2(m_gridSize) / m_spacing);
+            for (auto i = 0; i < numObjects; i++) {
+//            auto pid = intCoords(positions[i]);
+//            if(pid.x < 0 || pid.x > gridSize.x || pid.y < 0 || pid.y > gridSize.y){
+//                spdlog::info("point {} {} is outside of grid", positions[i], glm::vec2(pid));
+//            }
+                const auto h = hashPosition(positions[i]);
+                id = i;
+                m_set.set(h);
+                m_counts[h]--;
 //                assert(m_counts[h] >= 0);
-            this->m_cellEntries[this->m_counts[h]] = i;
+                this->m_cellEntries[this->m_counts[h]] = i;
+            }
+        }catch(...){
+            spdlog::error("error during grid initialization position: {}, hash: {}", positions[id], hashPosition(positions[id]));
+            throw;
         }
 
     }

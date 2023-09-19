@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <cstddef>
 #include <memory>
+#include <algorithm>
 
 enum class Field : int { Position = 0, PreviousPosition, Velocity, Mass, Restitution, Radius };
 
@@ -133,6 +134,11 @@ struct InterleavedMemoryLayout {
         ValueType& operator[](int id) const {
             auto ptr = (m_layout.data + id);
             return *as<ValueType>(as<char>(ptr) + m_offset);
+        }
+
+        template<typename Comparator>
+        void sort(size_t size, Comparator&& comparator) {
+
         }
 
     private:
@@ -295,6 +301,11 @@ struct SeparateFieldMemoryLayout {
 
         ValueType& operator[](int id) const {
             return m_ptr[id];
+        }
+
+        template<typename Comparator>
+        void sort(size_t size, Comparator&& comparator) {
+            std::sort(m_ptr, m_ptr + size, comparator);
         }
 
     private:
