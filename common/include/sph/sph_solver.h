@@ -34,12 +34,12 @@ public:
             , m_numIterations( numIterations )
             , m_gravityForce(0, -gravity)
             , m_density(maxNumParticles)
+            , m_previous_density(maxNumParticles)
             , m_forces(maxNumParticles)
             , W(kernel(smoothingRadius * 2))
             , dW(kernel.gradient(smoothingRadius * 2))
             , ddW(kernel.laplacian(smoothingRadius * 2))
-            , m_grid{ smoothingRadius, 25000}
-            , h4(std::pow(smoothingRadius * 2, 4))
+            , m_grid{ smoothingRadius, int(maxNumParticles)}
 {}
 
     ~SphSolver2D() override = default;
@@ -63,9 +63,10 @@ public:
         const auto h = glm::vec2(m_smoothingRadius * 2);
 
         resolveCollision(N, dt);
-        computeDensity(N, h);
+//        computeDensity(N, h);
         computeForces(N, h);
         integrate(N, dt);
+        std::swap(m_previous_density, m_density);
     }
 
     void resolveCollision(size_t N, float dt) {
@@ -108,9 +109,7 @@ public:
             auto p = this->particles().position()[i];
             auto neighbours = m_grid.query(p, h);
             m_density[i] = computeDensity(i, neighbours);
-            d = m_density[i];
         }
-//        spdlog::info("density: {}", d);
     }
 
     float computeDensity(int i, std::span<int> neighbours) {
@@ -129,24 +128,24 @@ public:
     void computeForces(size_t N, glm::vec2 h) {
         for(auto i = 0; i < N; i++){
             auto& f = m_forces[i];
-            f.x = f.y = 0;
             auto density = m_density[i];
             auto x = this->particles().position()[i];
             auto neighbours = m_grid.query(x, h);
-            computePressureForce(i, neighbours, x, density, f);
-//            if(i == N/2) {
-//                spdlog::info("pressure force: {}", f);
-//            }
-            f += m_gravityForce + computeViscousForce(i, neighbours);
+
+            m_previous_density[i] = computeDensity(i, neighbours);
+            f = m_gravityForce
+                 + computePressureForce(i, neighbours, x, density)
+                 + computeViscousForce(i, neighbours, x, density);
         }
     }
 
-    void computePressureForce(int i, std::span<int> neighbours, const glm::vec2& xi, float di, glm::vec2& f) {
+    glm::vec2 computePressureForce(int i, std::span<int> neighbours, const glm::vec2& xi, float di) {
         const auto k = m_gasConstant;
         const auto m = m_mass;
 
-        if(di == 0 ) return;
+        if(di == 0 ) return {};
 
+        glm::vec2 f{};
         for(auto j : neighbours){
             if(j == i) continue;
             auto xj = this->particles().position()[j];
@@ -155,18 +154,16 @@ public:
             auto w = dW(r);
             f +=  (dj == 0) ? glm::vec2{0} : (m/dj) * k * (di + dj) * w * 0.5f;
         }
-        f *= -(m/di);
+        return f * -(m/di);
     }
 
 
-    glm::vec2 computeViscousForce(int i, std::span<int> neighbours) {
+    glm::vec2 computeViscousForce(int i, std::span<int> neighbours, const glm::vec2& xi, float di) {
         if(m_viscousConstant <= 0) return {};
 
-        const auto xi = this->particles().position()[i];
         const auto mu = m_viscousConstant;
         const auto vi = this->particles().velocity()[i];
         const auto m = m_mass;
-        const auto di = m_density[i];
 
         if(di == 0) return {};
 
@@ -247,6 +244,7 @@ private:
 
     glm::vec2 m_gravityForce{0};
 
+    std::vector<float> m_previous_density;
     std::vector<float> m_density;
     std::vector<glm::vec2> m_forces;
 
@@ -254,7 +252,6 @@ private:
     std::function<float(glm::vec2)> W;
     std::function<glm::vec2(glm::vec2)> dW;
     std::function<float(glm::vec2)> ddW;
-    float h4{0};
 
     UnBoundedSpacialHashGrid2D m_grid;
 };

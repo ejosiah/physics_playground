@@ -37,7 +37,7 @@ layout(location = 0) out struct {
 void main(){
     Particle p = particles[gl_InstanceIndex];
     vec2 wPos = p.cPosition + position * p.radius;
-    vs_out.position = projection * view * model * vec4(wPos, 0, 1);
+    vs_out.position = projection * view * model * vec4(wPos, 1, 1);
     vs_out.color = colors[gl_InstanceIndex];
 
     gl_Position = vs_out.position;

@@ -143,10 +143,10 @@ public:
 
     std::span<int32_t> query(glm::vec<L, float> position, glm::vec<L, float> maxDist) {
         try {
-            auto h0 = hashPosition(position);
-            if (!m_set.test(h0)) {
-                return {};
-            }
+//            auto h0 = hashPosition(position);
+//            if (!m_set.test(h0)) {
+//                return {};
+//            }
 
             auto d0 = intCoords(position - maxDist);
             auto d1 = intCoords(position + maxDist);
@@ -207,13 +207,13 @@ public:
     int32_t size() const { return m_tableSize; }
 
     [[nodiscard]]
-    std::vector<int32_t> entries() const { return m_cellEntries; }
+    const std::vector<int32_t>& entries() const { return m_cellEntries; }
 
     [[nodiscard]]
     std::vector<int32_t> queryIds() const { return m_queryIds; }
 
     [[nodiscard]]
-    std::vector<int32_t> counts() const { return m_counts; }
+    const std::vector<int32_t>& counts() const { return m_counts; }
 
     std::unordered_map<int, std::set<int>> m_collisions;
 

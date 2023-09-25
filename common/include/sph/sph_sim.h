@@ -39,6 +39,8 @@ public:
 
     void initVertexBuffer();
 
+    void initGpuHashGrid();
+
     void createDescriptorPool();
 
     void createDescriptorSetLayout();
@@ -48,6 +50,10 @@ public:
     void createCommandPool();
 
     VkCommandBuffer *buildCommandBuffers(uint32_t imageIndex, uint32_t &numCommandBuffers) override;
+
+    void renderParticles(VkCommandBuffer commandBuffer);
+
+    void renderMetaballs(VkCommandBuffer commandBuffer);
 
     void renderOverlay(VkCommandBuffer commandBuffer);
 
@@ -60,10 +66,14 @@ public:
 protected:
     void newFrame() override;
 
+    void onSwapChainRecreation() override;
+
 private:
     static Settings create(Dimension screenDim);
 
     static std::vector<RenderVertex1> circle(const glm::vec4& color);
+
+    static std::vector<RenderVertex1> quad(const glm::vec4& color);
 
     void createPipeline();
 
@@ -105,11 +115,39 @@ private:
     } vBuffer;
 
     struct {
+        VulkanBuffer vertices;
+    } qBuffer;
+
+    struct {
+        VulkanBuffer counts;
+        VulkanBuffer countsCopy;
+        VulkanBuffer cellEntries;
+        VulkanBuffer cellEntriesCopy;
+        VulkanDescriptorSetLayout setLayout;
+        VkDescriptorSet descriptorSet;
+        UnBoundedSpacialHashGrid2D cpuGrid;
+
+        struct {
+            glm::mat4 model{1};
+            glm::mat4 view{1};
+            glm::mat4 projection{1};
+            float spacing{};
+            int tableSize{};
+        } constants;
+    } gpuSpacialHash;
+
+    struct {
         VulkanPipelineLayout layout;
         VulkanPipeline pipeline;
         VulkanDescriptorSetLayout setLayout;
         VkDescriptorSet descriptorSet;
     } m_render;
+
+    struct {
+        VulkanPipelineLayout layout;
+        VulkanPipeline pipeline;
+        VulkanDescriptorSetLayout setLayout;
+    } m_metaballs;
 
     int fixedUpdatesPerSecond{60};
     std::vector<std::unique_ptr<ParticleEmitter<SeparateFieldMemoryLayout>>> m_emitters;

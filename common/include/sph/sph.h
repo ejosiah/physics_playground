@@ -11,6 +11,7 @@
 #define _15_over_pi (15.f/glm::pi<float>())
 #define _45_over_pi (45.f/glm::pi<float>())
 #define _90_over_pi (90.f/glm::pi<float>())
+#define _315_over_64_pi (315.f/(64.f * glm::pi<float>()))
 
 template<glm::length_t L>
 struct SphParticle {
@@ -32,10 +33,17 @@ struct SphParticle {
 };
 
 template<glm::length_t L>
+inline auto safeLength(glm::vec<L, float> R) {
+    auto rr = glm::dot(R, R);
+    return rr == 0.f ? 0.f : sqrt(rr);
+}
+
+
+template<glm::length_t L>
 struct Kernel {
 
     auto operator()(float h) {
-          const auto inv_h3 = h * h * h;
+          const auto inv_h3 = 1.f/(h * h * h);
 
           return [=](glm::vec<L, float> R) {
               auto r = safeLength(R);
@@ -46,7 +54,7 @@ struct Kernel {
     }
 
     auto gradient(float h) {
-        const auto inv_h4 = h * h * h * h;
+        const auto inv_h4 = 1/(h * h * h * h);
 
         return [=](glm::vec<L, float> R) {
             auto r = safeLength(R);
@@ -58,7 +66,7 @@ struct Kernel {
     }
 
     auto  laplacian(float h) {
-        const auto inv_h5 = h * h * h * h * h;
+        const auto inv_h5 = 1/(h * h * h * h * h);
         return [=](glm::vec<L, float> R){
             auto r = safeLength(R);
             if(r == 0 || r > h) return 0.f;
@@ -66,13 +74,9 @@ struct Kernel {
         };
     }
 
-//private:
-    auto safeLength(glm::vec<L, float> R) {
-        auto rr = glm::dot(R, R);
-        return rr == 0.f ? 0.f : sqrt(rr);
-    }
     static constexpr glm::vec<L, float> zero{};
 };
+
 
 using SphParticle2D = SphParticle<2>;
 using SphParticle3D = SphParticle<3>;

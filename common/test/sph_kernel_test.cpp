@@ -3,7 +3,7 @@
 
 struct SphKernelFixture : public ::testing::Test {
 public:
-    static constexpr float h = 1;
+    static constexpr float h = 0.2;
 };
 
 
@@ -11,9 +11,9 @@ public:
 TEST_F(SphKernelFixture, kernel) {
     Kernel<2> k{};
     auto W = k(h);
-    glm::vec2 R{0.3, 0.4};
+    glm::vec2 R{0.03, 0.04};
     auto res = W(R);
-    ASSERT_NEAR(0.59683, res, 0.01);
+    ASSERT_NEAR(251.788, res, 0.01);
 }
 
 TEST_F(SphKernelFixture, evaluateKernelAtsmoothingRadius) {
@@ -37,15 +37,16 @@ TEST_F(SphKernelFixture, KernelWithDegenerateRadius) {
     auto W = k(h);
     glm::vec2 R{0};
     auto res = W(R);
-    ASSERT_EQ(_15_over_pi, res);
+    auto invh3 = 1/(h * h * h);
+    ASSERT_EQ(_15_over_pi * invh3, res);
 }
 
 TEST_F(SphKernelFixture, gradient) {
     Kernel<2> k{};
     auto dW = k.gradient(h);
-    glm::vec2 R{0.3, 0.4};
+    glm::vec2 R{0.03, 0.04};
 
-    auto expected = 3.58098;
+    auto expected = 5035.761;
 
     auto res = dW(R);
     auto s = glm::sign(res);
@@ -86,9 +87,9 @@ TEST_F(SphKernelFixture, gradientWithDegenrateRadius) {
 TEST_F(SphKernelFixture, laplacian) {
     Kernel2D  k{};
     auto ddW = k.laplacian(h);
-    glm::vec2 R{0.3, 0.4};
+    glm::vec2 R{0.03, 0.04};
     auto res = ddW(R);
-    ASSERT_NEAR(14.324, res, 0.01);
+    ASSERT_NEAR(67143.491, res, 0.01);
 }
 
 TEST_F(SphKernelFixture, evaluateLaplacianAtsmoothingRadius) {

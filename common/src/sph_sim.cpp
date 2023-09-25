@@ -11,6 +11,7 @@ SphSim::SphSim(const std::string &title, Bounds2D bounds, uDimension screenDim, 
 
 void SphSim::initApp() {
     initCamera();
+    initGpuHashGrid();
     createParticles();
     initVertexBuffer();
     createDescriptorPool();
@@ -24,8 +25,8 @@ void SphSim::initApp() {
 
 void SphSim::initCamera() {
     const auto [lower, upper] = m_bounds;
-    m_camera.model = glm::mat4(1);
-    m_camera.proj = vkn::ortho(lower.x, upper.x, lower.y, upper.y);
+    m_camera.model = gpuSpacialHash.constants.model = glm::mat4(1);
+    m_camera.proj = gpuSpacialHash.constants.projection = vkn::ortho(lower.x, upper.x, lower.y, upper.y);
 }
 
 void SphSim::createParticles() {
@@ -87,6 +88,20 @@ void SphSim::createParticles() {
 void SphSim::initVertexBuffer() {
     auto vertices = circle(glm::vec4{1, 0, 0, 1});
     vBuffer.vertices = device.createDeviceLocalBuffer(vertices.data(), BYTE_SIZE(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+    vertices = quad(glm::vec4{1, 0, 0, 1});
+    qBuffer.vertices = device.createDeviceLocalBuffer(vertices.data(), BYTE_SIZE(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+}
+
+void SphSim::initGpuHashGrid() {
+    gpuSpacialHash.cpuGrid = UnBoundedSpacialHashGrid2D {particles.handle.smoothingRadius * 2, int(particles.max)};
+    auto allocation = gpuSpacialHash.cpuGrid.entries();
+    gpuSpacialHash.cellEntries = device.createDeviceLocalBuffer(allocation.data(), BYTE_SIZE(allocation), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    gpuSpacialHash.cellEntriesCopy = device.createStagingBuffer(BYTE_SIZE(allocation));
+
+    allocation = gpuSpacialHash.cpuGrid.counts();
+    gpuSpacialHash.counts = device.createDeviceLocalBuffer(allocation.data(), BYTE_SIZE(allocation), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    gpuSpacialHash.countsCopy = device.createStagingBuffer(BYTE_SIZE(allocation));
 }
 
 void SphSim::createDescriptorPool() {
@@ -121,7 +136,7 @@ void SphSim::createDescriptorSetLayout() {
             .binding(0)
                 .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                 .descriptorCount(1)
-                .shaderStages(VK_SHADER_STAGE_VERTEX_BIT)
+                .shaderStages(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
             .binding(1)
                 .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
                 .descriptorCount(1)
@@ -131,14 +146,28 @@ void SphSim::createDescriptorSetLayout() {
                 .descriptorCount(1)
                 .shaderStages(VK_SHADER_STAGE_VERTEX_BIT)
         .createLayout();
+
+    gpuSpacialHash.setLayout =
+        device.descriptorSetLayoutBuilder()
+            .name("meta_balls")
+            .binding(0)
+                .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                .descriptorCount(1)
+                .shaderStages(VK_SHADER_STAGE_FRAGMENT_BIT)
+            .binding(1)
+                .descriptorType(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                .descriptorCount(1)
+                .shaderStages(VK_SHADER_STAGE_FRAGMENT_BIT)
+        .createLayout();
     
 }
 
 void SphSim::updateDescriptorSet() {
-    auto sets = m_descriptorPool.allocate({ m_render.setLayout });
+    auto sets = m_descriptorPool.allocate({ m_render.setLayout, gpuSpacialHash.setLayout });
     m_render.descriptorSet = sets[0];
+    gpuSpacialHash.descriptorSet = sets[1];
 
-    auto writes = initializers::writeDescriptorSets<3>();
+    auto writes = initializers::writeDescriptorSets<5>();
     writes[0].dstSet = m_render.descriptorSet;
     writes[0].dstBinding = 0;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -159,6 +188,21 @@ void SphSim::updateDescriptorSet() {
     writes[2].descriptorCount = 1;
     VkDescriptorBufferInfo colorInfo{particles.cBuffer, 0, VK_WHOLE_SIZE};
     writes[2].pBufferInfo = &colorInfo;
+
+    writes[3].dstSet = gpuSpacialHash.descriptorSet;
+    writes[3].dstBinding = 0;
+    writes[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[3].descriptorCount = 1;
+    VkDescriptorBufferInfo countsInfo{gpuSpacialHash.counts, 0, VK_WHOLE_SIZE};
+    writes[3].pBufferInfo = &countsInfo;
+
+    writes[4].dstSet = gpuSpacialHash.descriptorSet;
+    writes[4].dstBinding = 1;
+    writes[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[4].descriptorCount = 1;
+    VkDescriptorBufferInfo cellEntriesInfo{gpuSpacialHash.cellEntries, 0, VK_WHOLE_SIZE};
+    writes[4].pBufferInfo = &cellEntriesInfo;
+
     device.updateDescriptorSets(writes);
 }
 
@@ -188,13 +232,8 @@ VkCommandBuffer *SphSim::buildCommandBuffers(uint32_t imageIndex, uint32_t &numC
 
     vkCmdBeginRenderPass(commandBuffer, &rPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vBuffer.vertices, &offset);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render.pipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render.layout, 0, 1, &m_render.descriptorSet, 0, VK_NULL_HANDLE);
-    vkCmdPushConstants(commandBuffer, m_render.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Camera), &m_camera);
-    vkCmdDraw(commandBuffer, vBuffer.vertices.sizeAs<glm::vec2>(), particles.handle.data->size(), 0, 0);
-
+    renderParticles(commandBuffer);
+//    renderMetaballs(commandBuffer);
     renderOverlay(commandBuffer);
 
     vkCmdEndRenderPass(commandBuffer);
@@ -203,14 +242,33 @@ VkCommandBuffer *SphSim::buildCommandBuffers(uint32_t imageIndex, uint32_t &numC
     return &commandBuffer;
 }
 
+void SphSim::renderParticles(VkCommandBuffer commandBuffer) {
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vBuffer.vertices, &offset);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render.pipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_render.layout, 0, 1, &m_render.descriptorSet, 0, VK_NULL_HANDLE);
+    vkCmdPushConstants(commandBuffer, m_render.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Camera), &m_camera);
+    vkCmdDraw(commandBuffer, vBuffer.vertices.sizeAs<glm::vec2>(), particles.handle.data->size(), 0, 0);
+}
+
+void SphSim::renderMetaballs(VkCommandBuffer commandBuffer) {
+    static std::array<VkDescriptorSet, 2> sets{ m_render.descriptorSet, gpuSpacialHash.descriptorSet};
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, qBuffer.vertices, &offset);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_metaballs.pipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_metaballs.layout, 0, COUNT(sets), sets.data(), 0, VK_NULL_HANDLE);
+    vkCmdPushConstants(commandBuffer, m_metaballs.layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(gpuSpacialHash.constants), &gpuSpacialHash.constants);
+    vkCmdDraw(commandBuffer, 4, 1, 0, 0);
+}
+
 void SphSim::renderOverlay(VkCommandBuffer commandBuffer) {
     auto& imgui = plugin<ImGuiPlugin>(IM_GUI_PLUGIN);
 
     ImGui::Begin("Smoothed particle hydrodynamics");
     ImGui::SetWindowSize({400, 150});
-    options.reset |= ImGui::SliderFloat("smoothing radius", &options.h, 0.1, 1.0);
-    options.reset |= ImGui::SliderFloat("gravity", &options.g, 0, 100);
-    options.reset |= ImGui::SliderFloat("pressure constant", &options.k, 35, 750);
+    ImGui::SliderFloat("smoothing radius", &options.h, 0.1, 1.0);
+    ImGui::SliderFloat("gravity", &options.g, 0, 100);
+    ImGui::SliderFloat("pressure constant", &options.k, 35, 750);
 
 
     if(!options.start) {
@@ -218,7 +276,8 @@ void SphSim::renderOverlay(VkCommandBuffer commandBuffer) {
             options.start = true;
         }
     }else {
-        if (ImGui::Button("stop")) {
+        if (ImGui::Button("restart")) {
+            options.reset = true;
             options.start = false;
         }
     }
@@ -256,9 +315,18 @@ void SphSim::transferStateToGPU() {
     particles.pBuffer.copy(particles.position);
     particles.rBuffer.copy(particles.radius);
 
+    auto& grid = gpuSpacialHash.cpuGrid;
+    grid.initialize(*particles.handle.data, particles.handle.data->size());
+    gpuSpacialHash.constants.spacing = grid.numSpacing();
+    gpuSpacialHash.constants.tableSize = grid.size();
+    gpuSpacialHash.countsCopy.copy(grid.counts());
+    gpuSpacialHash.cellEntriesCopy.copy(grid.entries());
+
     device.graphicsCommandPool().oneTimeCommand([&](auto commandBuffer){
         device.copy(particles.pBuffer, particles.buffer, particles.pBuffer.size);
         device.copy(particles.rBuffer, particles.radiusBuffer, particles.radiusBuffer.size);
+        device.copy(gpuSpacialHash.countsCopy, gpuSpacialHash.counts, gpuSpacialHash.countsCopy.size);
+        device.copy(gpuSpacialHash.cellEntriesCopy, gpuSpacialHash.cellEntries, gpuSpacialHash.cellEntriesCopy.size);
     });
 }
 
@@ -283,7 +351,18 @@ std::vector<RenderVertex1> SphSim::circle(const glm::vec4 &color) {
         angle += delta;
     }
 
-    return vertices;}
+    return vertices;
+}
+
+std::vector<RenderVertex1> SphSim::quad(const glm::vec4 &color) {
+    std::vector<RenderVertex1> vertices{};
+    vertices.push_back({ glm::vec2{0, 0}, color });
+    vertices.push_back({ glm::vec2{20, 0}, color });
+    vertices.push_back({ glm::vec2{20, 20}, color });
+    vertices.push_back({ glm::vec2{0, 20}, color });
+
+    return vertices;
+}
 
 void SphSim::createPipeline() {
     //    @formatter:off
@@ -294,6 +373,7 @@ void SphSim::createPipeline() {
     auto builder = device.graphicsPipelineBuilder();
     m_render.pipeline =
         builder
+            .allowDerivatives()
             .shaderStage()
                 .vertexShader(vertexShader)
                 .fragmentShader("shader.frag.spv")
@@ -314,7 +394,7 @@ void SphSim::createPipeline() {
                     .extent(swapChain.extent)
                 .add()
             .rasterizationState()
-                .cullBackFace()
+                .cullNone()
                 .frontFaceCounterClockwise()
                 .polygonModeFill()
             .multisampleState()
@@ -335,6 +415,20 @@ void SphSim::createPipeline() {
             .subpass(0)
             .name("render")
         .build(m_render.layout);
+
+    m_metaballs.pipeline =
+        builder
+            .basePipeline(m_render.pipeline)
+            .shaderStage()
+                .vertexShader("quad.vert.spv")
+                .fragmentShader("metaballs.frag.spv")
+            .layout()
+                .clear()
+                .addPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(gpuSpacialHash.constants))
+                .addDescriptorSetLayout(m_render.setLayout)
+                .addDescriptorSetLayout(gpuSpacialHash.setLayout)
+            .name("metaballs")
+        .build(m_metaballs.layout);
     //    @formatter:on
 }
 
@@ -347,5 +441,16 @@ void SphSim::newFrame() {
         solver->smoothingRadius(h);
         solver->gasConstant(k);
         solver->gravity(g);
+        for(auto& emitter : m_emitters) {
+            emitter->clear();
+            emitter->enable();
+        }
+        particles.handle.data->clear();
+        options.start = true;
     }
+}
+
+void SphSim::onSwapChainRecreation() {
+    initCamera();
+    createPipeline();
 }
