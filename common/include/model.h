@@ -68,3 +68,14 @@ Bounds<L> expand(const Bounds<L>& bounds, float factor){
 
     return newBounds;
 }
+
+template<glm::length_t L>
+auto volume(const Bounds<L>& bounds) {
+    auto dim = bounds.upper - bounds.lower;
+    auto res = dim.x * dim.y;
+    if constexpr (L == 3) {
+        res *= dim.z;
+    }
+
+    return res;
+}

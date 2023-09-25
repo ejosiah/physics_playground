@@ -12,8 +12,9 @@
 #include <cstddef>
 #include <memory>
 #include <algorithm>
+#include <numeric>
 
-enum class Field : int { Position = 0, PreviousPosition, Velocity, Mass, Restitution, Radius };
+enum class Field : int { Position = 0, PreviousPosition, Velocity, Mass, Restitution, Radius, Color };
 
 using OffsetStride = std::tuple<int, int>;
 
@@ -105,6 +106,15 @@ struct Particles {
         _internal.seekHead++;
     }
 
+    template<typename Comparator>
+    void sort(Comparator&& comparator) {
+        layout.sort(_internal.seekHead, comparator);
+    }
+
+    void clear() {
+        _internal.seekHead = 0;
+    }
+
     struct {
         friend class Particles;
     private:
@@ -134,11 +144,6 @@ struct InterleavedMemoryLayout {
         ValueType& operator[](int id) const {
             auto ptr = (m_layout.data + id);
             return *as<ValueType>(as<char>(ptr) + m_offset);
-        }
-
-        template<typename Comparator>
-        void sort(size_t size, Comparator&& comparator) {
-
         }
 
     private:
@@ -217,7 +222,14 @@ struct InterleavedMemoryLayout {
     [[nodiscard]] size_t capacity() const {
         return _capacity;
     }
+
+    template<typename Comparator>
+    void sort(size_t size, Comparator&& comparator) {
+
+    }
 };
+
+static std::vector<int> g_indexes;
 
 template<typename VecType>
 struct SeparateFieldMemoryLayout {
@@ -247,6 +259,7 @@ struct SeparateFieldMemoryLayout {
     )
     {
         data = Members { position, prePosition, velocity, inverseMass, restitution, radius};
+//        indexes = std::vector<int>(position.size());
     }
 
     SeparateFieldMemoryLayout(size_t capacity)
@@ -301,11 +314,6 @@ struct SeparateFieldMemoryLayout {
 
         ValueType& operator[](int id) const {
             return m_ptr[id];
-        }
-
-        template<typename Comparator>
-        void sort(size_t size, Comparator&& comparator) {
-            std::sort(m_ptr, m_ptr + size, comparator);
         }
 
     private:
@@ -371,8 +379,21 @@ struct SeparateFieldMemoryLayout {
         return data.position.size();
     }
 
+    template<typename Comparator>
+    void sort(size_t size, Comparator&& comparator) {
+        std::iota(g_indexes.begin(), std::next(g_indexes.begin(), size), 0);
+        std::sort(g_indexes.begin(), std::next(g_indexes.begin(), size), comparator);
+
+        for(int i = 0; i < size; i++){
+            data.position[i] = std::exchange(data.position[g_indexes[i]], data.position[i]);
+            data.prePosition[i] = std::exchange(data.prePosition[g_indexes[i]], data.prePosition[i]);
+            data.velocity[i] = std::exchange(data.velocity[g_indexes[i]], data.velocity[i]);
+        }
+    }
+
 private:
     std::vector<char> memory;
+    std::vector<int> indexes;
 
 };
 
@@ -423,6 +444,15 @@ inline std::shared_ptr<SeparateFieldParticle2D> createSeparateFieldParticle2DPtr
         , std::span<float> restitution
         , std::span<float> radius) {
     return std::make_shared<SeparateFieldParticle2D>( SeparateFieldParticle2D{ {positions, prevPosition, velocity, inverseMass, restitution, radius} });
+}
+
+inline std::unique_ptr<SeparateFieldParticle2D> createSeparateFieldParticle2DOwnedPtr(std::span<glm::vec2> positions
+        , std::span<glm::vec2> prevPosition
+        , std::span<glm::vec2> velocity
+        , std::span<float> inverseMass
+        , std::span<float> restitution
+        , std::span<float> radius) {
+    return std::make_unique<SeparateFieldParticle2D>( SeparateFieldParticle2D{ {positions, prevPosition, velocity, inverseMass, restitution, radius} });
 }
 
 inline SeparateFieldParticle2D createSeparateFieldParticle2D(size_t numParticles){

@@ -95,6 +95,8 @@ public:
 
     virtual void solve(float dt) = 0;
 
+    virtual void clear() {}
+
 public:
     CollisionStats collisionStats{};
 
@@ -157,7 +159,7 @@ private:
 };
 
 
-template<template<typename> typename Layout>
+template<template<typename> typename Layout = SeparateFieldMemoryLayout>
 class VarletIntegrationSolver : public Solver2D<Layout> {
 public:
     VarletIntegrationSolver() = default;
@@ -182,11 +184,15 @@ public:
 
     void boundsCheck(int i);
 
+    std::unordered_map<int, std::set<int>>& hashCollisions() {
+        return m_grid.m_collisions;
+    }
+
 private:
-    BoundedSpacialHashGrid2D m_grid;
+    UnBoundedSpacialHashGrid2D m_grid;
     int m_iterations{1};
-    float m_damp{1.0};
-    float m_radius;
+    float m_damp{1};
+    float m_radius{1};
 };
 
 
@@ -350,7 +356,8 @@ VarletIntegrationSolver<Layout>::VarletIntegrationSolver(std::shared_ptr<Particl
         , m_radius(maxRadius)
 {
     glm::ivec2 gridSize = worldBounds.upper - worldBounds.lower;
-    m_grid = BoundedSpacialHashGrid2D{maxRadius * 2, gridSize };
+   // m_grid = BoundedSpacialHashGrid2D{maxRadius * 2, gridSize };
+    m_grid = UnBoundedSpacialHashGrid2D{maxRadius * 2, 20000 };
 }
 
 template<template<typename> typename Layout>
@@ -369,8 +376,13 @@ void VarletIntegrationSolver<Layout>::subStep(float dt) {
 
 template<template<typename> typename Layout>
 void VarletIntegrationSolver<Layout>::resolveCollision(float dt) {
+//    this->particles().sort([this](const auto& a, const auto& b){
+//        return m_grid.hashPosition(this->particles().position()[a]) <= m_grid.hashPosition(this->particles().position()[b]);
+//    });
     const auto numParticles = this->particles().size();
+
     auto vPositions = this->particles().position();
+
     m_grid.initialize(this->particles(), numParticles);
 
     for(int i = 0; i < numParticles; i++){
@@ -398,21 +410,21 @@ void VarletIntegrationSolver<Layout>::resolveCollision(float dt) {
 template<template<typename> typename Layout>
 int VarletIntegrationSolver<Layout>::resolveCollision(int ia, int ib) {
     auto position = this->particles().position();
-    auto restitution = this->particles().restitution();
-    auto radius = this->particles().radius();
+//    auto restitution = this->particles().restitution();
+//    auto radius = this->particles().radius();
 
     auto& pa = position[ia];
     auto& pb = position[ib];
     glm::vec2 dir = pb - pa;
-    auto rr = radius[ia] + radius[ib];
-    auto rr2 = rr * rr;
+    constexpr auto rr = 0.2f;
+    constexpr auto rr2 = rr * rr;
     auto dd = glm::dot(dir, dir);
     if(dd == 0 || dd > rr2) return 0;
 
     auto d = glm::sqrt(dd);
     dir /= d;
 
-    auto corr = restitution[ia] * (rr - d) * .5f;
+    auto corr = 0.5f * (rr - d) * .5f;
     pa -= dir * corr;
     pb += dir * corr;
 
@@ -434,29 +446,33 @@ void VarletIntegrationSolver<Layout>::boundsCheck(int i) {
     glm::vec2 d{0};
 
     if(p.x < min.x){
-        n.x = -1;
-        d.x = min.x - p.x;
+//        n.x = -1;
+//        d.x = min.x - p.x;
+        p.x = min.x;
         collides = true;
     }
     if(p.x > max.x){
-        n.x = 1;
-        d.x = p.x - max.x;
+//        n.x = 1;
+//        d.x = p.x - max.x;
+        p.x = max.x;
         collides = true;
     }
     if(p.y < min.y){
-        n.y = -1;
-        d.y = min.y - p.y;
+//        n.y = -1;
+//        d.y = min.y - p.y;
+        p.y = min.y;
         collides = true;
     }
     if(p.y > max.y){
-        n.y = 1;
-        d.y = p.y - max.y;
+//        n.y = 1;
+//        d.y = p.y - max.y;
+        p.y = max.y;
         collides = true;
     }
 
-    if(collides) {
-        p -= glm::normalize(n) * glm::length(d) * rest;
-    }
+//    if(collides) {
+//        p -= glm::normalize(n) * glm::length(d) * rest;
+//    }
 //    if(collides){
 //        boundCollisions.push_back(i);
 //    }

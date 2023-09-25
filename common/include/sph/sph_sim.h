@@ -1,11 +1,9 @@
 #pragma once
 
 #include "model2d.h"
-#include "solver2d.h"
 #include "spacial_hash.h"
 #include "types.h"
 #include "particle.h"
-#include "world2d.h"
 #include "profile.h"
 #include <VulkanBaseApp.h>
 #include <GraphicsPipelineBuilder.hpp>
@@ -18,33 +16,28 @@
 #include <span>
 #include <memory>
 #include "particle_emitter.h"
+#include "sph.h"
+#include "sph_solver.h"
 
-
-using uDimension = glm::uvec2;
-using Dimension = glm::vec2;
-
-struct RenderVertex{
+struct RenderVertex1{
     glm::vec2 position;
     glm::vec4 color;
 };
 
-template<template<typename> typename Layout>
-class World2D : public VulkanBaseApp {
+using uDimension = glm::uvec2;
+using Dimension = glm::vec2;
+
+class SphSim : public VulkanBaseApp {
 public:
-    World2D() = default;
+    SphSim(const std::string& title, Bounds2D bounds, uDimension screenDim, Emitters<SeparateFieldMemoryLayout>&& emitters);
 
-    World2D(const std::string& title, Bounds2D bounds, uDimension screenDim, Emitters<Layout>&& emitters, float radius = 0.1f);
-
-protected:
     void initApp() final;
 
     void initCamera();
 
-    void initVertexBuffer();
-
     void createParticles();
 
-    void colorParticles();
+    void initVertexBuffer();
 
     void createDescriptorPool();
 
@@ -64,21 +57,15 @@ protected:
 
     void transferStateToGPU();
 
-    void checkAppInputs() override;
-
-    static Dimension computeSimDimensions(float simWidth, Dimension screenDim);
+protected:
+    void newFrame() override;
 
 private:
     static Settings create(Dimension screenDim);
 
-    static std::vector<RenderVertex> circle(const glm::vec4& color);
+    static std::vector<RenderVertex1> circle(const glm::vec4& color);
 
     void createPipeline();
-
-    void snapshot();
-
-protected:
-    void onSwapChainRecreation() override;
 
 private:
     Bounds2D m_bounds;
@@ -86,11 +73,9 @@ private:
     VulkanCommandPool m_commandPool;
     std::vector<VkCommandBuffer> m_commandBuffers;
     Camera m_camera;
-    std::unique_ptr<Solver2D<Layout>> solver;
-
 
     struct {
-        std::shared_ptr<Particle2D<Layout>> handle;
+        SphParticle2D handle;
         std::span<glm::vec4> color{};
         VulkanBuffer cBuffer;
         VulkanBuffer buffer;
@@ -107,6 +92,14 @@ private:
     } particles;
 
     struct {
+        float h{0.2};
+        float g{50};
+        float k{250};
+        bool start{false};
+        bool reset{false};
+    } options;
+
+    struct {
         VulkanBuffer vertices;
         VulkanBuffer indices;
     } vBuffer;
@@ -117,19 +110,9 @@ private:
         VulkanDescriptorSetLayout setLayout;
         VkDescriptorSet descriptorSet;
     } m_render;
-    int m_numIterations{8};
-    std::array<double, 100> execTime{};
 
-
-    float m_restitution{0.5};
-    bool m_gravityOn{true};
-    float m_radius{};
-    int physicsFrame{1};
-    bool debugMode{false};
-    bool nextFrame{false};
     int fixedUpdatesPerSecond{60};
-    std::vector<std::unique_ptr<ParticleEmitter<Layout>>> emitters;
-    bool pausePhysics{false};
-    bool solveCollisions{false};
-    int collisionIterations{100};
+    std::vector<std::unique_ptr<ParticleEmitter<SeparateFieldMemoryLayout>>> m_emitters;
+    std::unique_ptr<SphSolver2D<SeparateFieldMemoryLayout>> solver;
+
 };

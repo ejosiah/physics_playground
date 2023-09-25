@@ -25,6 +25,9 @@ set(GLSL_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/resources/shaders)
 set(SPV_DIR "${CMAKE_CURRENT_BINARY_DIR}/bin")
 compile_glsl_directory(SRC_DIR "${GLSL_SOURCE_DIR}" OUT_DIR "${SPV_DIR}" INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/data/shaders")
 
+file(COPY ${CMAKE_CURRENT_LIST_DIR}/resources/Portrait-8.jpg DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/bin")
+file(COPY ${CMAKE_CURRENT_LIST_DIR}/resources/wall2.jpg DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/bin")
+
 add_subdirectory(dependencies)
 add_subdirectory(common)
 add_subdirectory(physics)

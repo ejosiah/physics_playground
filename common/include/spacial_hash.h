@@ -13,7 +13,19 @@
 #include <bitset>
 #include <glm_format.h>
 
-template<bool Unbounded = true>
+struct PrimeHash {
+
+    int32_t operator()(glm::ivec2 pid) const {
+        return 541 * pid.x + 79 * pid.y;
+    }
+
+    int32_t operator()(glm::ivec3 pid) const {
+        return 541 * pid.x + 79 * pid.y + 31 * pid.z;
+    }
+
+};
+
+template<glm::length_t L, bool Unbounded = true, typename Hash = PrimeHash>
 class SpacialHashGrid2D {
 public:
     SpacialHashGrid2D() = default;
@@ -29,7 +41,7 @@ public:
     {}
 
     template<typename = std::enable_if<!Unbounded>>
-    SpacialHashGrid2D(float spacing, glm::ivec2 gridSize)
+    SpacialHashGrid2D(float spacing, glm::vec<L, int> gridSize)
     : m_spacing(spacing)
     , m_gridSize(gridSize)
     , m_tableSize(glm::floor((gridSize.x/spacing * gridSize.y/spacing)))
@@ -41,26 +53,16 @@ public:
 
 
     [[nodiscard]]
-    int32_t hashPosition(glm::vec2 position) const {
+    int32_t hashPosition(glm::vec<L, float> position) const {
         auto pid = intCoords(position);
         if constexpr (!Unbounded){
-            auto gridSize = glm::ivec2(glm::vec2(m_gridSize) / m_spacing);
-            pid = glm::clamp(pid, glm::ivec2(0), gridSize - 1);
+            auto gridSize = glm::vec<L, int>(glm::vec<L, float>(m_gridSize) / m_spacing);
+            pid = glm::clamp(pid, glm::vec<L, int>(0), gridSize - 1);
         }
        return hash(pid);
     }
 
-    [[nodiscard]]
-    int32_t hash(glm::ivec2 pid) const {
-        if constexpr (Unbounded) {
-            const auto h = (pid.x * 92837111) ^ (pid.y * 689287499);
-            return glm::abs(h) % static_cast<int32_t>(m_tableSize);
-        } else {
-            return pid.x + (m_gridSize.x/m_spacing * pid.y);
-        }
-    }
-
-    void initialize(std::span<glm::vec2> positions) {
+    void initialize(std::span<glm::vec<L, float>> positions) {
         const auto numObjects = glm::min(positions.size(), m_cellEntries.size());
 
         std::fill_n(m_counts.begin(), m_counts.size(), 0);
@@ -84,7 +86,18 @@ public:
         }
     }
 
-    template<template<typename> typename Layout>
+    template<typename = std::enable_if<L == 2>>
+    [[nodiscard]] int32_t hash(glm::vec<L, int> pid) const {
+        static Hash hash{};
+        if constexpr (Unbounded) {
+            return glm::abs(hash(pid)) % static_cast<int32_t>(m_tableSize);
+        } else {
+            return pid.x + (m_gridSize.x/m_spacing * pid.y);  // TODO account for z axis
+        }
+    }
+
+
+    template<template<typename> typename Layout = SeparateFieldMemoryLayout>
     void initialize(Particle2D<Layout>& particles, size_t size) {
         static int id = -1;
         const auto positions = particles.position();
@@ -97,7 +110,6 @@ public:
             for (auto i = 0; i < numObjects; i++) {
                 id = i;
                 auto h = hashPosition(positions[i]);
-//                spdlog::info("pos: {}, hash: {}", positions[i], h);
                 m_counts[h]++;
             }
 
@@ -108,17 +120,13 @@ public:
 
             m_counts[m_tableSize] = m_counts[m_tableSize - 1];
 
-            auto gridSize = glm::ivec2(glm::vec2(m_gridSize) / m_spacing);
+            auto gridSize = glm::vec<L, int>(glm::vec<L, float>(m_gridSize) / m_spacing);
             for (auto i = 0; i < numObjects; i++) {
-//            auto pid = intCoords(positions[i]);
-//            if(pid.x < 0 || pid.x > gridSize.x || pid.y < 0 || pid.y > gridSize.y){
-//                spdlog::info("point {} {} is outside of grid", positions[i], glm::vec2(pid));
-//            }
+
                 const auto h = hashPosition(positions[i]);
                 id = i;
                 m_set.set(h);
                 m_counts[h]--;
-//                assert(m_counts[h] >= 0);
                 this->m_cellEntries[this->m_counts[h]] = i;
             }
         }catch(...){
@@ -129,11 +137,11 @@ public:
     }
 
     [[nodiscard]]
-    glm::ivec2 intCoords(glm::vec2 position) const {
+    glm::vec<L, int> intCoords(glm::vec<L, float> position) const {
         return glm::floor(position / m_spacing);
     }
 
-    std::span<int32_t> query(glm::vec2 position, glm::vec2 maxDist) {
+    std::span<int32_t> query(glm::vec<L, float> position, glm::vec<L, float> maxDist) {
         try {
             auto h0 = hashPosition(position);
             if (!m_set.test(h0)) {
@@ -144,9 +152,9 @@ public:
             auto d1 = intCoords(position + maxDist);
 
             if constexpr (!Unbounded) {
-                d0 = glm::max(glm::ivec2(0), d0);
+                d0 = glm::max(glm::vec<L, int>(0), d0);
 
-                auto limit = glm::ivec2(glm::vec2(m_gridSize) / m_spacing) - 1;
+                auto limit = glm::vec<L, int>(glm::vec<L, float>(m_gridSize) / m_spacing) - 1;
                 d1 = glm::min(limit, d1);
             }
 
@@ -160,7 +168,8 @@ public:
                     const auto end = m_counts[h + 1];
 
                     auto size = end - start;
-                    auto offset = std::max(0, size - m_cellCapacity);
+//                    auto offset = std::max(0, size - m_cellCapacity);
+                    auto offset = 0;
                     start += offset;
 
                     for (auto i = start; i < end; ++i) {
@@ -175,6 +184,15 @@ public:
         }
 
         return queryResults();
+    }
+
+    void checkCollision(int gridId, int hash){
+        if(!m_collisions.contains(hash)){
+            m_collisions[hash] = std::set<int>{};
+        }
+        if(!m_collisions[hash].contains(gridId)){
+            m_collisions[hash].insert(gridId);
+        }
     }
 
     [[nodiscard]]
@@ -197,6 +215,8 @@ public:
     [[nodiscard]]
     std::vector<int32_t> counts() const { return m_counts; }
 
+    std::unordered_map<int, std::set<int>> m_collisions;
+
 
 private:
     float m_spacing{};
@@ -206,10 +226,13 @@ private:
     std::vector<int32_t> m_queryIds{};
     uint32_t m_querySize{};
     int32_t m_cellCapacity{4};
-    glm::ivec2 m_gridSize{};
+    glm::vec<L, int> m_gridSize{};
     std::bitset<1000000> m_set;
 };
 
 
-using BoundedSpacialHashGrid2D = SpacialHashGrid2D<false>;
-using UnBoundedSpacialHashGrid2D = SpacialHashGrid2D<true>;
+using BoundedSpacialHashGrid2D = SpacialHashGrid2D<2, false>;
+using UnBoundedSpacialHashGrid2D = SpacialHashGrid2D<2, true>;
+
+using BoundedSpacialHashGrid3D = SpacialHashGrid2D<3, false>;
+using UnBoundedSpacialHashGrid3D = SpacialHashGrid2D<3, true>;

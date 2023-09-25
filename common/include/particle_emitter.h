@@ -31,6 +31,9 @@ public:
         m_particles = particles;
     }
 
+    virtual void clear() {
+        m_currentTime = 0;
+    }
 
 protected:
     auto target() {
@@ -49,3 +52,6 @@ void ParticleEmitter<Layout>::update(float deltaTime) {
     onUpdate(m_currentTime, deltaTime);
     m_currentTime += deltaTime;
 }
+
+template<template<typename> typename Layout>
+using Emitters = std::vector<std::unique_ptr<ParticleEmitter<Layout>>>;

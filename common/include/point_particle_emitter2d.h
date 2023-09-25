@@ -30,6 +30,13 @@ public:
 
     void add(glm::vec2 position, glm::vec2 velocity);
 
+    void clear() final  {
+        ParticleEmitter<Layout>::clear();
+        this->enable();
+        m_numberOfEmittedParticles = 0;
+        m_firstFrameTimeInSeconds = 0;
+    }
+
 private:
     float random();
 

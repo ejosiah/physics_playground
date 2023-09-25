@@ -2,6 +2,7 @@
 #include "serializer.h"
 #include "profile.h"
 #include "c_debug.h"
+#include "multi_threaded_solver_2d.h"
 #include <GraphicsPipelineBuilder.hpp>
 #include <DescriptorSetBuilder.hpp>
 #include <xforms.h>
@@ -11,6 +12,9 @@
 #include <memory>
 #include <glm_format.h>
 #include <fmt/format.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+static int g_iterations = 0;
 
 template<template<typename> typename Layout>
 World2D<Layout>::World2D(const std::string &title, Bounds2D bounds, uDimension screenDim, Emitters<Layout>&& emitters, float radius)
@@ -100,6 +104,8 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     cAvg /= collisionStats.average.size();
 
 
+
+
     ImGui::TextColored({1, 1, 1, 1}, "physics %d ms/frame", to<int>(avg));
     ImGui::TextColored({1, 1, 1, 1}, "%d frames/second", framePerSecond);
     ImGui::TextColored({1, 1, 1, 1}, "%d particles", particles.handle->size());
@@ -108,12 +114,42 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     ImGui::TextColored({1, 1, 1, 1}, "%d average collisions", to<int>(cAvg));
     ImGui::TextColored({1, 1, 1, 1}, "%d max collisions", collisionStats.max);
     ImGui::TextColored({1, 1, 1, 1}, "particle[0] velocity(%s)", fmt::format("{}", particles.velocity[0]).c_str());
+
+
+    static bool once = true;
+//    if(particles.handle->size() >= 10000 && once){
+//        once = false;
+//        auto& hashCollisions = dynamic_cast<VarletIntegrationSolver<Layout>&>(*solver).hashCollisions();
+//        std::map<int, int> counts;
+//        for(auto [hash, gridIds] : hashCollisions){
+//            if(gridIds.size() > 1){
+//                counts[hash] = gridIds.size();
+//            }
+//        }
+//        std::stringstream ss;
+//        for(auto [hash, count] : counts){
+//            ss << std::format("{} => {}\n", hash, count);
+//        }
+//        spdlog::info("{}", ss.str());
+//    }
+
     collisionStats.total = 0;
 
     ImGui::End();
-    if(avg >= 16){
-        for(auto& emitter : emitters) emitter->disable();
-    }
+//    if(avg >= 16){
+//        for(auto& emitter : emitters) emitter->disable();
+//    }
+//    static int iterations = 0;
+//    iterations++;
+//    if(particles.handle->size() >= 15000 && once){
+//        once = false;
+//        auto size = m_bounds.upper - m_bounds.lower;
+//        for(int i = 0; i < particles.handle->size() ; i++){
+//            auto uv = particles.handle->position()[i]/size;
+//            particles.color[i] = glm::vec4(uv, 0, 1);
+//        }
+//        spdlog::info("iterations: {}", g_iterations);
+//    }
 
     ImGui::Begin("controls");
     float y = pausePhysics ? 100 : 80;
@@ -129,6 +165,17 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     if(ImGui::Button("pause")){
         pausePhysics = !pausePhysics;
     }
+
+    ImGui::SameLine();
+
+    if(ImGui::Button("restart")){
+        particles.handle->clear();
+        for(auto& emitter : emitters){
+            emitter->clear();
+        }
+        g_iterations = 0;
+    }
+
 
     if(pausePhysics){
         ImGui::SliderInt("iterations: ", &collisionIterations, 10, 5000);
@@ -157,12 +204,6 @@ void World2D<Layout>::update(float time) {
             }
         }
     }
-//    if(solveCollisions){
-//        for(auto i = 0; i < collisionIterations; i++){
-//            solver->collisionHandler().resolveCollision();
-//        }
-//        solveCollisions = false;
-//    }
     transferStateToGPU();
 }
 
@@ -175,6 +216,7 @@ void World2D<Layout>::fixedUpdate(float deltaTime) {
         emitter->update(deltaTime);
     }
     auto duration = profile<chrono::milliseconds>([&] {
+        g_iterations++;
         solver->solve(deltaTime);
     });
     execTime[count++] = to<double>(duration.count());
@@ -370,21 +412,69 @@ void World2D<Layout>::createParticles() {
     particles.color = std::span{ reinterpret_cast<glm::vec4*>(particles.cBuffer.map()), particles.max };
 
     for(auto& emitter : emitters) emitter->set(particles.handle);
-    colorParticles();
 //    loadParticles();
     solver = std::make_unique<VarletIntegrationSolver<Layout>>(particles.handle, m_bounds, m_radius, m_numIterations);
 //    solver = std::make_unique<VoidSolver<Layout>>();
+    colorParticles();
+
 }
+
+struct IColor {
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+    unsigned char a;
+};
 
 template<template<typename> typename Layout>
 void World2D<Layout>::colorParticles() {
 
-    auto cRand = rng(0, 1, (1 << 11));
 
+    auto cRand = rng(0, 1, (1 << 11));
+    constexpr auto half_pi = glm::half_pi<float>();
     std::generate(particles.color.begin(), particles.color.end(), [&](){
-        return  glm::vec4(cRand(), cRand(), cRand(), 1 );
-//        return  glm::vec4(1);
+//        return  glm::vec4(cRand(), cRand(), cRand(), 1 );
+        return  glm::vec4(1);
     });
+    const auto N = 15000;
+//    for(auto i = 0; i < N; i++){
+//        auto x = to<float>(i)/to<float>(N);
+//        particles.color[i].r = glm::sin(half_pi * x);
+//        particles.color[i].g = glm::sin(2 * half_pi * x);
+//        particles.color[i].b = glm::cos(half_pi * x);
+//    }
+
+    auto dt = 1.f/fixedUpdatesPerSecond;
+    while(particles.handle->size() < N){
+        fixedUpdate(dt);
+    }
+
+    for(auto i = 0; i < 600; i++){
+        fixedUpdate(dt);
+    }
+
+    int width, height, channels;
+    stbi_set_flip_vertically_on_load(1);
+    auto image = stbi_load("wall2.jpg", &width, &height, &channels, STBI_rgb_alpha);
+    spdlog::info("loaded image: [width: {}, height: {}, channels: {}]", width, height, channels);
+    IColor* iColor = reinterpret_cast<IColor*>(image);
+    auto size = m_bounds.upper - m_bounds.lower;
+    for(int i = 0; i < particles.handle->size() ; i++){
+        auto uv = particles.handle->position()[i]/size;
+        auto x = to<int>(glm::floor(uv.x * width));
+        auto y = to<int>(glm::floor(uv.y * height));
+        auto id = y * width + x;
+        auto c = iColor[id];
+        particles.color[i] = glm::vec4(c.r, c.g, c.b, c.a)/255.f;
+//        particles.color[i] = glm::vec4(uv, 0, 1);
+    }
+    stbi_image_free(image);
+
+    particles.handle->clear();
+    for(auto& emitter : emitters){
+        emitter->clear();
+    }
+    g_iterations = 0;
 }
 
 template<template<typename> typename Layout>
