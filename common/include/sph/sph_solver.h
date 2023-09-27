@@ -78,7 +78,7 @@ public:
     void boundsCheck(int i) {
         auto& position = this->particles().position()[i];
         auto& velocity = this->particles().velocity()[i];
-        auto rest = 0.5f;
+        auto rest = 0.6f;
 
         auto [min, max] = shrink(this->bounds(), m_radius);
 
@@ -122,7 +122,7 @@ public:
             totalWeight += W(xi - xj);
         }
 
-        return m_mass * N * totalWeight;
+        return glm::max(RestDensity, m_mass * N * totalWeight);
     }
 
     void computeForces(size_t N, glm::vec2 h) {
@@ -142,7 +142,7 @@ public:
     glm::vec2 computePressureForce(int i, std::span<int> neighbours, const glm::vec2& xi, float di) {
         const auto k = m_gasConstant;
         const auto m = m_mass;
-
+        constexpr auto d0 = RestDensity;
         if(di == 0 ) return {};
 
         glm::vec2 f{};
@@ -152,7 +152,7 @@ public:
             auto dj = m_density[j];
             auto r = xi - xj;
             auto w = dW(r);
-            f +=  (dj == 0) ? glm::vec2{0} : (m/dj) * k * (di + dj) * w * 0.5f;
+            f +=  (dj == 0) ? glm::vec2{0} : (m/dj) * k * ((di - d0) + (dj - d0)) * w * 0.5f;
         }
         return f * -(m/di);
     }
@@ -252,6 +252,7 @@ private:
     std::function<float(glm::vec2)> W;
     std::function<glm::vec2(glm::vec2)> dW;
     std::function<float(glm::vec2)> ddW;
+    static constexpr float RestDensity = 0;
 
     UnBoundedSpacialHashGrid2D m_grid;
 };

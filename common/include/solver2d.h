@@ -410,8 +410,6 @@ void VarletIntegrationSolver<Layout>::resolveCollision(float dt) {
 template<template<typename> typename Layout>
 int VarletIntegrationSolver<Layout>::resolveCollision(int ia, int ib) {
     auto position = this->particles().position();
-//    auto restitution = this->particles().restitution();
-//    auto radius = this->particles().radius();
 
     auto& pa = position[ia];
     auto& pb = position[ib];

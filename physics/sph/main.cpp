@@ -10,7 +10,7 @@ int main(int, char**){
 
 
     std::function<float(const glm::vec2& point)> sdf = [](const glm::vec2& point) {
-        auto d0 = point.y - 5.0f;
+        auto d0 = point.y - 19.0f;
 //        auto d1 = glm::distance(point, glm::vec2(10, 15)) - 1.0f;
 //        return glm::min(d0, d1);
         return d0;

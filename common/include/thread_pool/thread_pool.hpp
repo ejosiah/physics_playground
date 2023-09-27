@@ -10,6 +10,41 @@
 namespace tp
 {
 
+    struct TaskQueue2 {
+        std::queue<std::function<void()>> m_tasks;
+        bool m_busy{};
+
+        template<typename TCallback>
+        void addTask(TCallback&& callback)
+        {
+            m_tasks.push(std::forward<TCallback>(callback));
+            m_busy = true;
+        }
+
+        void getTask(std::function<void()>& target_callback) {
+            if (m_tasks.empty()) {
+                return;
+            }
+
+            target_callback = std::move(m_tasks.front());
+            m_tasks.pop();
+        }
+
+        static void wait() {
+            std::this_thread::yield();
+        }
+
+        void waitForCompletion() const {
+            while (m_busy) {
+                wait();
+            }
+        }
+
+        void workDone(){
+            m_busy = false;
+        }
+    };
+
     struct TaskQueue
     {
         std::queue<std::function<void()>> m_tasks;
@@ -54,6 +89,7 @@ namespace tp
         }
     };
 
+
     struct Worker
     {
         uint32_t              m_id      = 0;
@@ -94,19 +130,57 @@ namespace tp
         }
     };
 
+    struct Worker2 {
+        uint32_t              m_id      = 0;
+        std::thread           m_thread;
+        std::function<void()> m_task    = nullptr;
+        TaskQueue2            m_queue;
+        bool                  m_running = true;
+
+        Worker2(uint32_t id): m_id{id} {
+            m_thread = std::thread([this](){
+                run();
+            });
+        }
+
+        void run(){
+            while (m_running) {
+                m_queue.getTask(m_task);
+                if (m_task == nullptr) {
+                    TaskQueue2::wait();
+                } else {
+                    m_task();
+                    m_queue.workDone();
+                    m_task = nullptr;
+                }
+            }
+        }
+
+        void stop(){
+            m_running = false;
+            m_thread.join();
+        }
+    };
+
     struct ThreadPool
     {
         uint32_t            m_thread_count = 0;
         TaskQueue           m_queue;
         std::vector<Worker> m_workers;
+        std::vector<Worker2> m_workers2;
+        mutable uint32_t m_next = 0;
 
         explicit
         ThreadPool(uint32_t thread_count)
                 : m_thread_count{thread_count}
         {
             m_workers.reserve(thread_count);
+            m_workers2.reserve(thread_count);
             for (uint32_t i{thread_count}; i--;) {
                 m_workers.emplace_back(m_queue, static_cast<uint32_t>(m_workers.size()));
+            }
+            for (uint32_t i{thread_count}; i--;) {
+                m_workers2.emplace_back(static_cast<uint32_t>(m_workers2.size()));
             }
         }
 
@@ -123,9 +197,23 @@ namespace tp
             m_queue.addTask(std::forward<TCallback>(callback));
         }
 
+        template<typename TCallback>
+        void addTask2(TCallback&& callback)
+        {
+//            m_queue.addTask(std::forward<TCallback>(callback));
+              m_workers2[m_next++].m_queue.addTask(std::forward<TCallback>(callback));
+        }
+
         void waitForCompletion() const
         {
             m_queue.waitForCompletion();
+        }
+
+        void waitForCompletion2() const {
+            for(auto i = 0; i < m_next; i++){
+                m_workers2[i].m_queue.waitForCompletion();
+            }
+            m_next = 0;
         }
 
         template<typename TCallback>

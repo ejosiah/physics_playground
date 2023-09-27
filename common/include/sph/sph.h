@@ -22,8 +22,8 @@ struct SphParticle {
     std::vector<VecType> pressure;
     std::vector<float> density;
     float smoothingRadius{0.2};
-    float gasConstant{100};
-    float viscosityConstant{0};
+    float gasConstant{20};
+    float viscosityConstant{0.99};
     float gravity{0.1};
     float mass{1};
 
@@ -43,34 +43,38 @@ template<glm::length_t L>
 struct Kernel {
 
     auto operator()(float h) {
-          const auto inv_h3 = 1.f/(h * h * h);
+          const auto c = _315_over_64_pi/std::powf(h, 9);
+          const auto h2 = h*h;
 
           return [=](glm::vec<L, float> R) {
               auto r = safeLength(R);
               if(r > h) return 0.f;
-              const auto _1_rh = (1 - r / h);
-              return _15_over_pi * inv_h3 * _1_rh * _1_rh * _1_rh;
+              const auto x = (h2 - r*r);
+              return c * x * x * x;
           };
     }
 
     auto gradient(float h) {
-        const auto inv_h4 = 1/(h * h * h * h);
+        const auto c = _45_over_pi/std::powf(h, 6);
 
         return [=](glm::vec<L, float> R) {
             auto r = safeLength(R);
             if(r == 0 || r > h + 0.001) return zero;
 
-            const auto _1_rh = (1 - r / h);
-            return -_45_over_pi * inv_h4 * _1_rh * _1_rh * R/r;
+            const auto x = h - r;
+            return -c * x * x * R/r;
         };
     }
 
     auto  laplacian(float h) {
-        const auto inv_h5 = 1/(h * h * h * h * h);
+        const auto h2 = h * h;
+        const auto _2h3 = 2 * h2 * h;
         return [=](glm::vec<L, float> R){
-            auto r = safeLength(R);
+            const auto r = safeLength(R);
             if(r == 0 || r > h) return 0.f;
-            return _90_over_pi * inv_h5 * (1 - r/h);
+            const auto r2 = r * r;
+            const auto r3 = r2 * r;
+            return r3/_2h3 + r2/h2 + h/(2*r) - 1;
         };
     }
 

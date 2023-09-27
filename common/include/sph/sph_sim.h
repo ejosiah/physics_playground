@@ -149,7 +149,7 @@ private:
         VulkanDescriptorSetLayout setLayout;
     } m_metaballs;
 
-    int fixedUpdatesPerSecond{60};
+    int fixedUpdatesPerSecond{120};
     std::vector<std::unique_ptr<ParticleEmitter<SeparateFieldMemoryLayout>>> m_emitters;
     std::unique_ptr<SphSolver2D<SeparateFieldMemoryLayout>> solver;
 

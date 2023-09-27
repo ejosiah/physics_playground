@@ -3,10 +3,15 @@
 #include "solver2d.h"
 #include "thread_pool/thread_pool.hpp"
 #include <vector>
+#include <istream>
+
+template<template<typename> typename Layout>
+class CollisionResolver;
 
 template<template<typename> typename Layout>
 class MultiThreadedSolver : public Solver2D<Layout> {
 public:
+    friend class CollisionResolver<Layout>;
     MultiThreadedSolver(
             std::shared_ptr<Particle2D<Layout>> particles,
             Bounds2D worldBounds,
@@ -26,16 +31,135 @@ public:
 
     void boundsCheck(int i);
     
-    void workerThreadResolveCollision(int id, int pass);
+    void workerThreadResolveCollision(int id);
 
 private:
-    BoundedSpacialHashGrid2D m_grid;
+    UnBoundedSpacialHashGrid2D m_grid;
     int m_iterations{1};
     float m_damp{1.0};
     float m_radius;
     tp::ThreadPool m_threadPool;
     std::vector<glm::vec2> m_threadLocalParticles;
+    std::vector<CollisionResolver<Layout>> m_resolvers;
 };
+
+template<template<typename> typename Layout>
+class CollisionResolver {
+public:
+    CollisionResolver(uint32_t id, MultiThreadedSolver<Layout>& solver)
+    : m_id(id)
+    , m_solver(&solver)
+    , m_gridSpacing(solver.m_radius * 2)
+    , m_numWorkers(solver.m_threadPool.m_thread_count)
+    {
+        auto [sizeX, sizeY] = dimensions(solver.bounds());
+        auto ratio = 1.f/to<float>(solver.m_threadPool.m_thread_count);
+        m_bounds = solver.bounds();
+        auto offset = sizeX * ratio;
+        m_bounds.lower.x += to<float>(id) * offset;
+        m_bounds.upper.x = m_bounds.lower.x + offset;
+        std::stringstream ss;
+        ss << fmt::format("worker({}) bounds({}, {}) ", m_id, m_bounds.lower, m_bounds.upper);
+
+        if(m_numWorkers > 1){
+            auto g = solver.m_radius * 2;
+            if(id != 0) {   // left ghost region
+                ss << fmt::format("lg region: [{},{}] ", m_bounds.lower.x - g, m_bounds.lower.x);
+                m_bounds.lower.x -= g;
+            }
+            if(id != m_numWorkers - 1) {  // right ghost region
+                ss << fmt::format("rg region: [{},{}] ",m_bounds.upper.x, m_bounds.upper.x + g);
+                m_bounds.upper.x += g;
+            }
+        }
+        spdlog::info("{}", ss.str());
+    }
+
+    [[nodiscard]]
+    bool isGhost(const glm::vec2& p) const {
+        if(m_numWorkers == 1) return false;
+        const auto g = m_gridSpacing;
+
+        bool leftGhost = m_id > 0 && p.x > m_bounds.lower.x && p.x <= m_bounds.lower.x + g; // left ghost region
+
+        if(leftGhost){
+//            spdlog::info("worker({}): {} is in left ghost region {}", m_id, p, m_bounds.lower.x);
+        }
+
+        bool rightGhost = m_id < (m_numWorkers - 1) && p.x > m_bounds.upper.x - g &&  p.x <= m_bounds.upper.x; // right ghost region
+//        if(rightGhost){
+//            spdlog::info("worker({}): {} is in right ghost region  [{},{}]", m_id, p.x, m_bounds.upper.x - g, m_bounds.upper.x);
+//        }
+        return leftGhost || rightGhost;
+    }
+
+    void resolve() {
+        const auto numParticles = m_solver->particles().size();
+
+//    spdlog::info("worker({}) working on bounds({}, {})", m_id, m_bounds.lower, m_bounds.upper);
+        auto vPositions = m_solver->particles().position();
+
+        for(int i = 0; i < numParticles; i++){
+
+            auto& position = vPositions[i];
+            if(!contains(m_bounds, position)){
+                continue;
+            }
+
+            if(isGhost(position)) {
+                threadGroup[0][m_id].push_back(i);
+            }
+
+            auto ids = m_solver->m_grid.query(position, glm::vec2(m_gridSpacing));
+
+            int collisions = 0;
+            for(int j : ids){
+                if(i == j) continue;
+                auto& pa = position;
+                auto& pb = vPositions[j];
+
+                auto aGhost = isGhost(pa);
+                auto bGhost = isGhost(pb);
+                glm::vec2 dir = pb - pa;
+                constexpr auto rr = 0.2f;
+                constexpr auto rr2 = rr * rr;
+                auto dd = glm::dot(dir, dir);
+                auto collides = !(dd == 0 || dd > rr2);
+
+                if(!aGhost && !bGhost && collides) {
+                    auto d = glm::sqrt(dd);
+                    dir /= d;
+
+                    auto corr = 0.5f * (rr - d) * .5f;
+                    pa -= !aGhost ? dir * corr : glm::vec2(0);
+                    pb += !bGhost ? dir * corr : glm::vec2(0);
+                    collisions++;
+                }
+            }
+//            m_solver->collisionStats.average[m_solver->collisionStats.next++] = collisions;
+//            m_solver->collisionStats.max = glm::max(m_solver->collisionStats.max, collisions);
+//            m_solver->collisionStats.min = glm::min(m_solver->collisionStats.min, collisions);
+//
+//            m_solver->collisionStats.next %= m_solver->collisionStats.average.size();
+//            m_solver->collisionStats.total += collisions;
+        }
+    }
+
+private:
+    uint32_t m_id;
+    Bounds2D m_bounds;
+    float m_gridSpacing;
+    uint32_t m_numWorkers;
+    MultiThreadedSolver<Layout>* m_solver;
+    static thread_local std::vector<glm::vec2> local_positions;
+    static thread_local std::vector<glm::vec2> local_ids;
+    static thread_local size_t local_numParticles
+};
+
+template<template<typename> typename Layout>
+thread_local std::vector<glm::vec2> local_positions{};
+static thread_local std::vector<glm::vec2> local_ids{};
+static thread_local  size_t local_numParticles{};
 
 
 template<template<typename> typename Layout>
@@ -46,8 +170,11 @@ MultiThreadedSolver<Layout>::MultiThreadedSolver(std::shared_ptr<Particle2D<Layo
         , m_radius(maxRadius)
         , m_threadPool(numThreads)
 {
-    glm::ivec2 gridSize = worldBounds.upper - worldBounds.lower;
-    m_grid = BoundedSpacialHashGrid2D{maxRadius * 2, gridSize };
+    m_grid = UnBoundedSpacialHashGrid2D{maxRadius * 2, 20000 };
+    for(uint32_t i = 0; i < numThreads; i++){
+        m_resolvers.push_back({i, *this});
+    }
+    g_numThreads = numThreads;
 }
 
 template<template<typename> typename Layout>
@@ -75,8 +202,8 @@ void MultiThreadedSolver<Layout>::integrate(float dt) {
     auto prevPosition = this->particles().previousPosition();
     auto velocity = this->particles().velocity();
 
-    m_threadPool.dispatch(N, [&](const auto start, const auto end){
-        for(int i = start; i < end; i++){
+//    m_threadPool.dispatch(N, [&](const auto start, const auto end){
+        for(int i = 0; i < N; i++){
             auto p0 = prevPosition[i];
             auto p1 = position[i];
             auto p2 = 2.f * p1 - p0 + G * dt * dt;
@@ -84,48 +211,43 @@ void MultiThreadedSolver<Layout>::integrate(float dt) {
             prevPosition[i] = p1;
             velocity[i] = (p2 - p1)/dt;
         }
-    });
+//    });
 }
 
 
 template<template<typename> typename Layout>
 void MultiThreadedSolver<Layout>::resolveCollision(float dt) {
+    const auto numParticles = this->particles().size();
     m_grid.initialize(this->particles(), this->particles().size());
     for(auto i = 0; i < m_threadPool.m_thread_count; i++) {
-        m_threadPool.addTask([i, this]{ workerThreadResolveCollision(i, 0); });
+        m_threadPool.addTask([i, this]{ m_resolvers[i].resolve(); });
     }
     m_threadPool.waitForCompletion();
 
-    for(auto i = 0; i < m_threadPool.m_thread_count; i++) {
-        m_threadPool.addTask([i, this]{ workerThreadResolveCollision(i, 1); });
-    }
-    m_threadPool.waitForCompletion();
 
-    m_threadPool.dispatch(this->particles().size(), [this](const auto start, const auto end) {
-        for (auto i = start; i < end; i++) {
+//    m_threadPool.dispatch(this->particles().size(), [this](const auto start, const auto end) {
+        for (auto i = 0; i < numParticles; i++) {
             boundsCheck(i);
         }
-    });
+//    });
 }
 
 template<template<typename> typename Layout>
 int MultiThreadedSolver<Layout>::resolveCollision(int ia, int ib) {
     auto position = this->particles().position();
-    auto restitution = this->particles().restitution();
-    auto radius = this->particles().radius();
 
     auto& pa = position[ia];
     auto& pb = position[ib];
     glm::vec2 dir = pb - pa;
-    auto rr = radius[ia] + radius[ib];
-    auto rr2 = rr * rr;
+    constexpr auto rr = 0.2f;
+    constexpr auto rr2 = rr * rr;
     auto dd = glm::dot(dir, dir);
     if(dd == 0 || dd > rr2) return 0;
 
     auto d = glm::sqrt(dd);
     dir /= d;
 
-    auto corr = restitution[ia] * (rr - d) * .5f;
+    auto corr = 0.5f * (rr - d) * .5f;
     pa -= dir * corr;
     pb += dir * corr;
 
@@ -136,9 +258,6 @@ template<template<typename> typename Layout>
 void MultiThreadedSolver<Layout>::boundsCheck(int i) {
     auto radius = this->particles().radius()[i];
     auto& position = this->particles().position()[i];
-    auto rest = this->particles().restitution()[i];
-
-    bool collides = false;
 
     auto [min, max] = shrink(this->bounds(), radius);
 
@@ -147,64 +266,47 @@ void MultiThreadedSolver<Layout>::boundsCheck(int i) {
     glm::vec2 d{0};
 
     if(p.x < min.x){
-        n.x = -1;
-        d.x = min.x - p.x;
-        collides = true;
+        p.x = min.x;
     }
     if(p.x > max.x){
-        n.x = 1;
-        d.x = p.x - max.x;
-        collides = true;
+        p.x = max.x;
     }
     if(p.y < min.y){
-        n.y = -1;
-        d.y = min.y - p.y;
-        collides = true;
+        p.y = min.y;
     }
     if(p.y > max.y){
-        n.y = 1;
-        d.y = p.y - max.y;
-        collides = true;
+        p.y = max.y;
     }
 
-    if(collides) {
-        p -= glm::normalize(n) * glm::length(d) * rest;
-    }
-//    if(collides){
-//        boundCollisions.push_back(i);
-//    }
 }
 
 
 template<template<typename> typename Layout>
-void MultiThreadedSolver<Layout>::workerThreadResolveCollision(int id, int pass) {
+void MultiThreadedSolver<Layout>::workerThreadResolveCollision(int id) {
     auto gridSpacing = this->m_radius * 2;
     const auto numParticles = this->particles().size();
     const auto numWorkers = m_threadPool.m_thread_count;
 
-    auto gridSize = this->bounds().upper - this->bounds().lower;
-    auto [sizeX, sizeY] = dimensions(this->bounds());
-    auto ratio = 1.f/to<float>(numWorkers);
-    Bounds2D bounds = this->bounds();
-    auto offset = sizeX * ratio;
-    bounds.lower.x += to<float>(id) * offset;
-    bounds.upper.x = bounds.lower.x + offset;
+//    auto gridSize = this->bounds().upper - this->bounds().lower;
+//    auto [sizeX, sizeY] = dimensions(this->bounds());
+//    auto ratio = 1.f/to<float>(numWorkers);
+//    Bounds2D bounds = this->bounds();
+//    auto offset = sizeX * ratio;
+//    bounds.lower.x += to<float>(id) * offset;
+//    bounds.upper.x = bounds.lower.x + offset;
 
-    sizeX = bounds.upper.x - bounds.lower.x;
-    bounds.lower.x += pass * sizeX/2;
-    bounds.upper.x = bounds.lower.x + sizeX/2;
 
-//        spdlog::info("worker({}, pass: {}) working on bounds({}, {})", id, pass + 1, bounds.lower, bounds.upper);
+//    spdlog::info("worker({}) working on bounds({}, {})", id, bounds.lower, bounds.upper);
     auto vPositions = this->particles().position();
 
     for(int i = 0; i < numParticles; i++){
 
         auto& position = vPositions[i];
-        if(!contains(bounds, position)){
-            continue;
-        }
+//        if(!contains(bounds, position)){
+//            continue;
+//        }
 
-        threadGroup[pass][id].push_back(i);
+//        threadGroup[0][id].push_back(i);
 
         auto ids = m_grid.query(position, glm::vec2(m_radius * 2));
 
@@ -213,14 +315,11 @@ void MultiThreadedSolver<Layout>::workerThreadResolveCollision(int id, int pass)
             if(i == j) continue;
             collisions += resolveCollision(i, j);
         }
-//            collisionStats.average[collisionStats.next++] = collisions;
-//            collisionStats.max = glm::max(collisionStats.max, collisions);
-//            collisionStats.min = glm::min(collisionStats.min, collisions);
-//
-//            collisionStats.next %= collisionStats.average.size();
-//            collisionStats.total += collisions;
+            this->collisionStats.average[this->collisionStats.next++] = collisions;
+            this->collisionStats.max = glm::max(this->collisionStats.max, collisions);
+            this->collisionStats.min = glm::min(this->collisionStats.min, collisions);
+
+            this->collisionStats.next %= this->collisionStats.average.size();
+            this->collisionStats.total += collisions;
     }
-//        if(pass == 1){
-//            processed.clear();
-//        }
 }

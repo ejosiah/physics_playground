@@ -32,9 +32,10 @@ int main(int, char**){
         .withRestitution(0.5);
 
     std::function<float(const glm::vec2& point)> sdf = [](const glm::vec2& point) {
-        auto d0 = point.y - 3.0f;
+        auto d0 = point.y - 15.0f;
         auto d1 = glm::distance(point, glm::vec2(10, 18)) - 1.5f;
-        return glm::min(d0, d1);
+//        return glm::min(d0, d1);
+        return d0;
     };
 
     std::unique_ptr<PointGenerator2D> pointGenerator = std::make_unique<TrianglePointGenerator>();
@@ -42,8 +43,8 @@ int main(int, char**){
             std::make_unique<VolumeEmitter2D<SeparateFieldMemoryLayout>>(std::move(sdf), std::move(pointGenerator), shrink(bounds, radius), radius * 2);
 
     Emitters<SeparateFieldMemoryLayout> emitters{};
-    emitters.push_back(std::move(builder.makeUnique()));
-//    emitters.push_back(std::move(vemitter));
+//    emitters.push_back(std::move(builder.makeUnique()));
+    emitters.push_back(std::move(vemitter));
 
 //    builder
 //        .withOrigin({bounds.upper.x - radius * 2, bounds.upper.y - 2 * radius})
@@ -51,11 +52,11 @@ int main(int, char**){
 //
 //    emitters.push_back(std::move(builder.makeUnique()));
 
-    for(int i = 1; i < 10; i++) {
-        builder
-                .withOrigin({bounds.upper.x - radius * 2, bounds.upper.y - 2 * (radius + radius * i)});
-        emitters.push_back(std::move(builder.makeUnique()));
-    }
+//    for(int i = 1; i < 10; i++) {
+//        builder
+//                .withOrigin({bounds.upper.x - radius * 2, bounds.upper.y - 2 * (radius + radius * i)});
+//        emitters.push_back(std::move(builder.makeUnique()));
+//    }
 
     World2D<SeparateFieldMemoryLayout> world{"physics world",  bounds, {1024, 1024}
     , std::move(emitters), radius };

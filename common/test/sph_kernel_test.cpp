@@ -13,7 +13,7 @@ TEST_F(SphKernelFixture, kernel) {
     auto W = k(h);
     glm::vec2 R{0.03, 0.04};
     auto res = W(R);
-    ASSERT_NEAR(251.788, res, 0.01);
+    ASSERT_NEAR(161.363, res, 0.01);
 }
 
 TEST_F(SphKernelFixture, evaluateKernelAtsmoothingRadius) {
@@ -37,8 +37,7 @@ TEST_F(SphKernelFixture, KernelWithDegenerateRadius) {
     auto W = k(h);
     glm::vec2 R{0};
     auto res = W(R);
-    auto invh3 = 1/(h * h * h);
-    ASSERT_EQ(_15_over_pi * invh3, res);
+    ASSERT_NEAR(195.835, res, 0.01);
 }
 
 TEST_F(SphKernelFixture, gradient) {
@@ -89,7 +88,7 @@ TEST_F(SphKernelFixture, laplacian) {
     auto ddW = k.laplacian(h);
     glm::vec2 R{0.03, 0.04};
     auto res = ddW(R);
-    ASSERT_NEAR(67143.491, res, 0.01);
+    ASSERT_NEAR(1.0703, res, 0.01);
 }
 
 TEST_F(SphKernelFixture, evaluateLaplacianAtsmoothingRadius) {
@@ -97,7 +96,7 @@ TEST_F(SphKernelFixture, evaluateLaplacianAtsmoothingRadius) {
     auto ddW = k.laplacian(h);
     glm::vec2 R{0, h};
     auto res = ddW(R);
-    ASSERT_EQ(0, res);
+    ASSERT_EQ(1, res);
 }
 
 TEST_F(SphKernelFixture, evaluateLaplacianAbovesmoothingRadius) {

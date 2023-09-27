@@ -281,7 +281,7 @@ void SphSim::renderOverlay(VkCommandBuffer commandBuffer) {
             options.start = false;
         }
     }
-    ImGui::Text("fps %d", framePerSecond);
+    ImGui::Text("FPS %d, particles: %zu", framePerSecond, particles.handle.data->size());
     ImGui::End();
     
     imgui.draw(commandBuffer);

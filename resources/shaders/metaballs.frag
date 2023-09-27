@@ -9,15 +9,17 @@ layout(location=0) in struct {
 layout(location=0) out vec4 fragColor;
 
 void main(){
-    float d = -1000000;
+    float d = 1000000;
     vec2 p = fs_in.position.xy;
     int n = query(p, vec2(spacing));
+    vec2 f = fract(p);
+    vec2 i = floor(p);
     float r = spacing * 0.5;
     for(int i = 0; i < n; i++){
         vec2 c = particlePosition[cellEntries[queryId[i]]];
-        d = max(d, distance(c, p));
+        d = min(d, distance(c, f));
     }
 
-    fragColor = vec4(d, 0, 0, d);
+    fragColor = vec4(1 - d);
 
 }
