@@ -4,6 +4,7 @@
 #include "thread_pool/thread_pool.hpp"
 #include <vector>
 #include <istream>
+#include <mutex>
 
 template<template<typename> typename Layout>
 class CollisionResolver;
@@ -41,6 +42,9 @@ private:
     tp::ThreadPool m_threadPool;
     std::vector<glm::vec2> m_threadLocalParticles;
     std::vector<CollisionResolver<Layout>> m_resolvers;
+    std::mutex ghost_mutex;
+    std::condition_variable ghost_cv;
+    int ghost_id{-1};
 };
 
 template<template<typename> typename Layout>
@@ -102,12 +106,13 @@ public:
         for(int i = 0; i < numParticles; i++){
 
             auto& position = vPositions[i];
-            if(!contains(m_bounds, position)){
-                continue;
-            }
 
             if(isGhost(position)) {
                 threadGroup[0][m_id].push_back(i);
+            }
+
+            if(isGhost(position) || !contains(m_bounds, position)){
+                continue;
             }
 
             auto ids = m_solver->m_grid.query(position, glm::vec2(m_gridSpacing));
@@ -118,21 +123,19 @@ public:
                 auto& pa = position;
                 auto& pb = vPositions[j];
 
-                auto aGhost = isGhost(pa);
-                auto bGhost = isGhost(pb);
                 glm::vec2 dir = pb - pa;
                 constexpr auto rr = 0.2f;
                 constexpr auto rr2 = rr * rr;
                 auto dd = glm::dot(dir, dir);
                 auto collides = !(dd == 0 || dd > rr2);
 
-                if(!aGhost && !bGhost && collides) {
+                if(collides) {
                     auto d = glm::sqrt(dd);
                     dir /= d;
 
                     auto corr = 0.5f * (rr - d) * .5f;
-                    pa -= !aGhost ? dir * corr : glm::vec2(0);
-                    pb += !bGhost ? dir * corr : glm::vec2(0);
+                    pa -=  dir * corr;
+                    pb += !isGhost(pb) ? dir * corr : glm::vec2(0);
                     collisions++;
                 }
             }
@@ -153,7 +156,7 @@ private:
     MultiThreadedSolver<Layout>* m_solver;
     static thread_local std::vector<glm::vec2> local_positions;
     static thread_local std::vector<glm::vec2> local_ids;
-    static thread_local size_t local_numParticles
+    static thread_local size_t local_numParticles;
 };
 
 template<template<typename> typename Layout>

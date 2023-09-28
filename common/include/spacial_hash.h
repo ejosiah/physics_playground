@@ -82,7 +82,7 @@ public:
         for(auto i = 0; i < numObjects; i++){
             const auto h = hashPosition(positions[i]);
             m_counts[h]--;
-            this->m_cellEntries[this->m_counts[h]] = i;
+            m_cellEntries[m_counts[h]] = i;
         }
     }
 
