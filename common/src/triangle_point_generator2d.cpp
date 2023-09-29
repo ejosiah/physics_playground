@@ -1,4 +1,4 @@
-#include "triangle_point_generator2d.h"
+#include "generator/triangle_point_generator2d.h"
 #include <cmath>
 
 void TrianglePointGenerator::forEachPoint(const Bounds2D &bounds, float spacing, Callback callback) const {

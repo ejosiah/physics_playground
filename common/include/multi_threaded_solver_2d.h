@@ -205,8 +205,8 @@ void MultiThreadedSolver<Layout>::integrate(float dt) {
     auto prevPosition = this->particles().previousPosition();
     auto velocity = this->particles().velocity();
 
-//    m_threadPool.dispatch(N, [&](const auto start, const auto end){
-        for(int i = 0; i < N; i++){
+    m_threadPool.dispatch(N, [&](const auto start, const auto end){
+        for(int i = start; i < end; i++){
             auto p0 = prevPosition[i];
             auto p1 = position[i];
             auto p2 = 2.f * p1 - p0 + G * dt * dt;
@@ -214,7 +214,7 @@ void MultiThreadedSolver<Layout>::integrate(float dt) {
             prevPosition[i] = p1;
             velocity[i] = (p2 - p1)/dt;
         }
-//    });
+    });
 }
 
 
@@ -228,11 +228,11 @@ void MultiThreadedSolver<Layout>::resolveCollision(float dt) {
     m_threadPool.waitForCompletion();
 
 
-//    m_threadPool.dispatch(this->particles().size(), [this](const auto start, const auto end) {
-        for (auto i = 0; i < numParticles; i++) {
+    m_threadPool.dispatch(this->particles().size(), [this](const auto start, const auto end) {
+        for (auto i = start; i < end; i++) {
             boundsCheck(i);
         }
-//    });
+    });
 }
 
 template<template<typename> typename Layout>

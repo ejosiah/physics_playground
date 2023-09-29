@@ -1,14 +1,13 @@
-layout(set = 0, binding = 0) buffer ParticlePosSSBO {
-    vec2 particlePosition[];
-};
-
-
-layout(set = 1, binding = 0) buffer SPACIAL_HASH_COUNTS {
+layout(set = 0, binding = 0) buffer SPACIAL_HASH_COUNTS {
     int counts[];
 };
 
-layout(set = 1, binding = 1) buffer SPACIAL_HASH_ENTRIES {
+layout(set = 0, binding = 1) buffer SPACIAL_HASH_ENTRIES {
     int cellEntries[];
+};
+
+layout(set = 0, binding = 3) buffer ParticlePosSSBO {
+    vec2 particlePosition[];
 };
 
 layout(push_constant) uniform Constants {
@@ -17,6 +16,7 @@ layout(push_constant) uniform Constants {
     mat4 projection;
     float spacing;
     int tableSize;
+    int numParticles;
 };
 
 ivec2 intCoords(vec2 position)  {
@@ -25,8 +25,11 @@ ivec2 intCoords(vec2 position)  {
 
 int hash(ivec2 pid) {
     int h = 541 * pid.x + 79 * pid.y;
-
     return abs(h) % tableSize;
+}
+
+int hashPosition(vec2 position) {
+    return hash(intCoords(position));
 }
 
 

@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <random>
 #include <limits>
+#include "emitter/point_emitter.h"
 
 template<template<typename> typename Layout>
 class PointParticleEmitter2D : public ParticleEmitter<Layout> {
@@ -24,36 +25,8 @@ public:
 
     ~PointParticleEmitter2D() override = default;
 
-    void onUpdate(float currentTime, float deltaTime) override;
+    void onUpdate(float currentTime, float deltaTime) override {};
 
-    void emit(size_t maxNewNumberOfParticles, float deltaTime);
-
-    void add(glm::vec2 position, glm::vec2 velocity);
-
-    void clear() final  {
-        ParticleEmitter<Layout>::clear();
-        this->enable();
-        m_numberOfEmittedParticles = 0;
-        m_firstFrameTimeInSeconds = 0;
-    }
-
-private:
-    float random();
-
-public:
-    int maxNumberOfParticlePerSecond;
-    int maxNumberOfParticles;
-
-private:
-    std::default_random_engine m_rng;
-    float m_firstFrameTimeInSeconds{};
-    int m_numberOfEmittedParticles{};
-
-    glm::vec2 m_origin;
-    glm::vec2 m_direction;
-    float m_speed;
-    float m_spreadAngleRad;
-    ProtoTypeParticle2D m_prototype;
 };
 
 

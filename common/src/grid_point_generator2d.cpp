@@ -1,4 +1,4 @@
-#include "grid_point_generator2d.h"
+#include "generator/grid_point_generator2d.h"
 
 void GridPointGenerator2D::forEachPoint(const Bounds2D &bounds, float spacing, Callback callback) const {
     const auto [boxWidth, boxHeight] = dimensions(bounds);

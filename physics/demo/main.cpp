@@ -3,11 +3,9 @@
 #include <fmt/format.h>
 #include <iostream>
 #include <spdlog/spdlog.h>
-#include "random_emitter.h"
 #include "point_particle_emitter2d.h"
 #include "volume_emitter_2d.h"
-#include "grid_point_generator2d.h"
-#include "triangle_point_generator2d.h"
+#include "point_generators.h"
 #include <memory>
 
 int main(int, char**){

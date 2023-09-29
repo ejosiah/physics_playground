@@ -1,0 +1,17 @@
+#version 460
+
+layout(local_size_x = 1024) in;
+
+#include "spacial_hash.glsl"
+
+void main() {
+    int offset = int(gl_NumWorkGroups.x * gl_WorkGroupSize.x);
+    int i = int(gl_GlobalInvocationID.x);
+
+    for(; i < numParticles; i += offset) {
+        vec2 p = particlePosition[i];
+        int h = hashPosition(p);
+        atomicAdd(counts[h], -1);
+        cellEntries[counts[h]] = i;
+    }
+}

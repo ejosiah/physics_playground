@@ -1,7 +1,7 @@
 #pragma once
 
 #include "particle_emitter.h"
-#include "point_generator2d.h"
+#include "point_generators.h"
 #include <glm/glm.hpp>
 #include <random>
 #include <limits>
@@ -9,7 +9,7 @@
 #include <memory>
 
 template<template<typename> typename Layout>
-class VolumeEmitter2D : public ParticleEmitter<Layout> {
+struct VolumeEmitter2D : public ParticleEmitter<Layout> {
 public:
     VolumeEmitter2D(
             std::function<float(const glm::vec2&)> sdf,
@@ -21,18 +21,9 @@ public:
 
     ~VolumeEmitter2D() override = default;
 
-    void onUpdate(float currentTime, float deltaTime) override;
+    void onUpdate(float currentTime, float deltaTime) final {}
 
-    void set(std::unique_ptr<PointGenerator2D> pointGenerator) {
-        m_pointGenerator = std::move(pointGenerator);
-    }
 
-private:
-    std::function<float(const glm::vec2&)> m_sdf;
-    std::unique_ptr<PointGenerator2D> m_pointGenerator{};
-    Bounds2D m_bounds{};
-    float m_spacing{0};
 };
-
 
 

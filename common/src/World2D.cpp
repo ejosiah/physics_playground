@@ -136,9 +136,9 @@ void World2D<Layout>::renderOverlay(VkCommandBuffer commandBuffer) {
     collisionStats.total = 0;
 
     ImGui::End();
-    if(avg >= 16){
-        for(auto& emitter : emitters) emitter->disable();
-    }
+//    if(avg >= 16){
+//        for(auto& emitter : emitters) emitter->disable();
+//    }
 //    static int iterations = 0;
 //    iterations++;
 //    if(particles.handle->size() >= 15000 && once){
@@ -210,7 +210,7 @@ void World2D<Layout>::update(float time) {
 template<template<typename> typename Layout>
 void World2D<Layout>::fixedUpdate(float deltaTime) {
     initDebug();
-    colorParticles();
+//    colorParticles();
     static int count = 0;
     for(auto& emitter : emitters) {
         emitter->update(deltaTime);
@@ -228,8 +228,10 @@ void World2D<Layout>::fixedUpdate(float deltaTime) {
 //        particles.color[i] = {1, 0, 0, 1};
 //    }
     for(auto i = 0; i < g_numThreads; i++){
-        for(auto id : threadGroup[0][i]){
-            particles.color[id] = groupColor[0][i];
+        for(auto p = 0; p < 2; p++) {
+            for (auto id: threadGroup[p][i]) {
+                particles.color[id] = groupColor[p][i];
+            }
         }
     }
 }
@@ -411,7 +413,7 @@ void World2D<Layout>::createParticles() {
 
     for(auto& emitter : emitters) emitter->set(particles.handle);
 //    loadParticles();
-    solver = std::make_unique<MultiThreadedSolver<Layout>>(particles.handle, m_bounds, m_radius, m_numIterations, 2);
+    solver = std::make_unique<VarletIntegrationSolver<Layout>>(particles.handle, m_bounds, m_radius, m_numIterations);
 //    solver = std::make_unique<VoidSolver<Layout>>();
     colorParticles();
 
@@ -435,43 +437,43 @@ void World2D<Layout>::colorParticles() {
         return  glm::vec4(1);
     });
     const auto N = 15000;
-//    for(auto i = 0; i < N; i++){
-//        auto x = to<float>(i)/to<float>(N);
-//        particles.color[i].r = glm::sin(half_pi * x);
-//        particles.color[i].g = glm::sin(2 * half_pi * x);
-//        particles.color[i].b = glm::cos(half_pi * x);
-//    }
+    for(auto i = 0; i < N; i++){
+        auto x = to<float>(i)/to<float>(N);
+        particles.color[i].r = glm::sin(half_pi * x);
+        particles.color[i].g = glm::sin(2 * half_pi * x);
+        particles.color[i].b = glm::cos(half_pi * x);
+    }
 
-//    auto dt = 1.f/fixedUpdatesPerSecond;
-//    while(particles.handle->size() < N){
-//        fixedUpdate(dt);
-//    }
-//
-//    for(auto i = 0; i < 600; i++){
-//        fixedUpdate(dt);
-//    }
-//
-//    int width, height, channels;
-//    stbi_set_flip_vertically_on_load(1);
-//    auto image = stbi_load("Portrait-8.jpg", &width, &height, &channels, STBI_rgb_alpha);
-//    spdlog::info("loaded image: [width: {}, height: {}, channels: {}]", width, height, channels);
-//    IColor* iColor = reinterpret_cast<IColor*>(image);
-//    auto size = m_bounds.upper - m_bounds.lower;
-//    for(int i = 0; i < particles.handle->size() ; i++){
-//        auto uv = particles.handle->position()[i]/size;
-//        auto x = to<int>(glm::floor(uv.x * width));
-//        auto y = to<int>(glm::floor(uv.y * height));
-//        auto id = y * width + x;
-//        auto c = iColor[id];
-//        particles.color[i] = glm::vec4(c.r, c.g, c.b, c.a)/255.f;
-////        particles.color[i] = glm::vec4(uv, 0, 1);
-//    }
-//    stbi_image_free(image);
-//
-//    particles.handle->clear();
-//    for(auto& emitter : emitters){
-//        emitter->clear();
-//    }
+    auto dt = 1.f/fixedUpdatesPerSecond;
+    while(particles.handle->size() < N){
+        fixedUpdate(dt);
+    }
+
+    for(auto i = 0; i < 600; i++){
+        fixedUpdate(dt);
+    }
+
+    int width, height, channels;
+    stbi_set_flip_vertically_on_load(1);
+    auto image = stbi_load("Portrait-8.jpg", &width, &height, &channels, STBI_rgb_alpha);
+    spdlog::info("loaded image: [width: {}, height: {}, channels: {}]", width, height, channels);
+    IColor* iColor = reinterpret_cast<IColor*>(image);
+    auto size = m_bounds.upper - m_bounds.lower;
+    for(int i = 0; i < particles.handle->size() ; i++){
+        auto uv = particles.handle->position()[i]/size;
+        auto x = to<int>(glm::floor(uv.x * width));
+        auto y = to<int>(glm::floor(uv.y * height));
+        auto id = y * width + x;
+        auto c = iColor[id];
+        particles.color[i] = glm::vec4(c.r, c.g, c.b, c.a)/255.f;
+//        particles.color[i] = glm::vec4(uv, 0, 1);
+    }
+    stbi_image_free(image);
+
+    particles.handle->clear();
+    for(auto& emitter : emitters){
+        emitter->clear();
+    }
 //    g_iterations = 0;
 }
 

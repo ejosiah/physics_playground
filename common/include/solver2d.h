@@ -433,9 +433,6 @@ template<template<typename> typename Layout>
 void VarletIntegrationSolver<Layout>::boundsCheck(int i) {
     auto radius = this->particles().radius()[i];
     auto& position = this->particles().position()[i];
-    auto rest = this->particles().restitution()[i];
-
-    bool collides = false;
 
     auto [min, max] = shrink(this->bounds(), radius);
 
@@ -444,36 +441,17 @@ void VarletIntegrationSolver<Layout>::boundsCheck(int i) {
     glm::vec2 d{0};
 
     if(p.x < min.x){
-//        n.x = -1;
-//        d.x = min.x - p.x;
         p.x = min.x;
-        collides = true;
     }
     if(p.x > max.x){
-//        n.x = 1;
-//        d.x = p.x - max.x;
         p.x = max.x;
-        collides = true;
     }
     if(p.y < min.y){
-//        n.y = -1;
-//        d.y = min.y - p.y;
         p.y = min.y;
-        collides = true;
     }
     if(p.y > max.y){
-//        n.y = 1;
-//        d.y = p.y - max.y;
         p.y = max.y;
-        collides = true;
     }
-
-//    if(collides) {
-//        p -= glm::normalize(n) * glm::length(d) * rest;
-//    }
-//    if(collides){
-//        boundCollisions.push_back(i);
-//    }
 }
 
 template<template<typename> typename Layout>
